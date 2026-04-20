@@ -281,6 +281,126 @@ async def status():
     }
 
 
+# ── QASPER デモ論文定義 ────────────────────────────────────────────────────────
+# 論文: "Identifying Dogmatism in Social Media" (EMNLP 2016, arXiv:1609.00425)
+# QASPER 評価で ArgumentativeRAG が BM25 に負けた典型例として選定。
+
+_DEMO_PAPER = {
+    "paper_id": "1609.00425",
+    "title": "Identifying Dogmatism in Social Media: Signals and Models",
+    "venue": "EMNLP 2016",
+    "arxiv_url": "https://arxiv.org/abs/1609.00425",
+    "text": (
+        "Title: Identifying Dogmatism in Social Media: Signals and Models\n\n"
+        "Abstract:\n"
+        "We explore linguistic and behavioral features of dogmatism in social media and construct "
+        "statistical models that can identify dogmatic comments. Our model is based on a corpus of "
+        "Reddit posts, collected across a diverse set of conversational topics and annotated via paid "
+        "crowdsourcing. We operationalize key aspects of dogmatism described by existing psychology "
+        "theories (such as over-confidence), finding they have predictive power. We also find evidence "
+        "for new signals of dogmatism, such as the tendency of dogmatic posts to refrain from signaling "
+        "cognitive processes. When we use our predictive model to analyze millions of other Reddit posts, "
+        "we find evidence that suggests dogmatism is a deeper personality trait, present for dogmatic "
+        "users across many different domains, and that users who engage on dogmatic comments tend to show "
+        "increases in dogmatic posts themselves.\n\n"
+        "Introduction:\n"
+        "Dogmatism is the tendency to assert opinions as if they were facts, delivered with unwarranted "
+        "certainty and resistance to alternative viewpoints. In online discourse, dogmatic behavior "
+        "manifests as strong unjustified assertions without qualification or openness to revision. "
+        "Understanding and detecting dogmatism is important for moderating online communities, studying "
+        "political polarization, and building systems that can identify credible information sources.\n"
+        "Our central hypothesis is that dogmatic language carries distinctive linguistic signals: "
+        "overconfident assertions, absence of hedging language, and crucially, a refusal to signal "
+        "cognitive processes such as thinking or wondering. Dogmatic writers present conclusions as "
+        "settled facts rather than the outcomes of ongoing reasoning.\n\n"
+        "Data Collection and Annotation:\n"
+        "We collected a corpus of Reddit posts spanning multiple subreddits covering political, "
+        "scientific, and social topics. Posts were annotated by crowdworkers on Amazon Mechanical Turk. "
+        "Annotators judged which of a pair of posts was more dogmatic. We collected over 10,000 pairwise "
+        "annotations, achieving an inter-annotator agreement of Cohen's kappa = 0.57. "
+        "We converted pairwise comparisons to individual scores using the Bradley-Terry model. "
+        "Posts in the top quartile were labeled dogmatic; bottom quartile non-dogmatic, yielding "
+        "approximately 5,000 balanced training examples.\n\n"
+        "Features:\n"
+        "Overconfidence markers: Words signaling strong certainty such as 'absolutely', 'definitely', "
+        "'always', 'never', 'obviously', and 'of course'. Dogmatic posts use these at higher rates "
+        "because they assert claims without qualification.\n"
+        "Cognitive process signals (LIWC): Words reflecting internal mental states such as 'think', "
+        "'know', 'consider', 'believe', and 'wonder'. Dogmatic posts refrain from these signals because "
+        "they present conclusions as already settled, not as subjects of ongoing thought.\n"
+        "Hedging language: Expressions of uncertainty such as 'might', 'perhaps', 'possibly', and "
+        "'it seems'. Dogmatic posts avoid hedging because acknowledging doubt undermines their certainty.\n"
+        "Behavioral features: Number of subreddits the author participates in, karma score, and reply "
+        "rate. We hypothesize that dogmatism reflects a stable personality trait that should manifest "
+        "consistently across topics and communities.\n\n"
+        "Results:\n"
+        "Our logistic regression classifier achieves 69.4% accuracy on a held-out test set, "
+        "significantly above the 50% chance baseline. The random forest achieves 71.2% accuracy. "
+        "The most predictive features in order of importance are: (1) low use of cognitive process "
+        "words, (2) high use of overconfidence markers, (3) low use of hedging expressions, and "
+        "(4) high assertion density.\n"
+        "When applied to millions of Reddit posts, the model reveals that predicted dogmatism is "
+        "consistent across topics for individual users, confirming that dogmatism is a stable "
+        "personality trait rather than topic-specific behavior. Users who engage with dogmatic "
+        "comments subsequently show increased dogmatism in their own posts, suggesting that dogmatic "
+        "discourse may be socially contagious. However, this finding is correlational and does not "
+        "establish causation.\n\n"
+        "Limitations:\n"
+        "The corpus is limited to Reddit and writing norms differ across platforms such as Twitter. "
+        "Crowdsourced annotation may reflect cultural biases of predominantly English-speaking Western "
+        "workers. The behavioral contagion finding is correlational; self-selection into dogmatic "
+        "communities is an alternative explanation. Our dogmatism definition from psychology was "
+        "designed for individual assessment and may not translate cleanly to individual posts.\n\n"
+        "Conclusion:\n"
+        "We have shown that dogmatism can be identified with reasonable accuracy using linguistic and "
+        "behavioral features. The most striking finding is that dogmatic posts avoid cognitive process "
+        "words—'think', 'wonder', 'consider'—because they present conclusions as settled rather than "
+        "as outcomes of deliberation. This aligns with psychological theories that dogmatism involves "
+        "a closed cognitive style. Cross-domain analysis confirms dogmatism as a personality-level "
+        "phenomenon, and contagion analysis suggests exposure to dogmatic content may influence users' "
+        "own communication patterns."
+    ),
+    "questions": [
+        {
+            "id": 1,
+            "question": "What features are used to identify dogmatic posts?",
+            "query_type": "WHAT",
+            "ground_truth": "Overconfidence markers (e.g., 'absolutely', 'always'), absence of cognitive process signals (e.g., 'think', 'wonder'), absence of hedging language (e.g., 'might', 'perhaps'), and behavioral features such as subreddit diversity and karma.",
+        },
+        {
+            "id": 2,
+            "question": "Why do dogmatic posts refrain from signaling cognitive processes?",
+            "query_type": "WHY",
+            "ground_truth": "Because dogmatic writers present conclusions as already settled facts rather than outcomes of ongoing reasoning, so words like 'think' or 'wonder' would undermine the certainty they assert.",
+        },
+        {
+            "id": 3,
+            "question": "What evidence supports the claim that dogmatism is a personality trait?",
+            "query_type": "EVIDENCE",
+            "ground_truth": "Predicted dogmatism scores are consistent across different topics for individual users, showing that dogmatic behavior is cross-domain and stable rather than topic-specific.",
+        },
+        {
+            "id": 4,
+            "question": "What are the main limitations of this study?",
+            "query_type": "WHAT",
+            "ground_truth": "The corpus is Reddit-only; crowdsourced annotation may reflect cultural bias; the contagion finding is correlational; and the psychology-based dogmatism definition may not translate to individual posts.",
+        },
+        {
+            "id": 5,
+            "question": "What assumptions does the contagion finding depend on?",
+            "query_type": "ASSUMPTION",
+            "ground_truth": "The finding assumes causal influence from engaging with dogmatic comments, but the alternative explanation of self-selection into dogmatic communities is not ruled out.",
+        },
+    ],
+}
+
+
+@app.get("/api/demo")
+async def get_demo():
+    """QASPER デモ論文の情報・本文・質問セットを返す。"""
+    return _DEMO_PAPER
+
+
 # ── 静的ファイル配信 ───────────────────────────────────────────────────────────
 
 static_dir = Path(__file__).parent / "static"

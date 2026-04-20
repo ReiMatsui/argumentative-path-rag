@@ -161,19 +161,29 @@ TRAVERSAL_STRATEGIES: dict[QueryType, TraversalStrategy] = {
         },
     ),
     QueryType.WHAT: TraversalStrategy(
-        entry_node_types=[NodeType.CLAIM, NodeType.DEFINITION],
-        follow_edges=[],  # 入口ノードのみ（探索なし）
+        # 修正 (v2): CLAIM/DEFINITION だけでなく CONCLUSION も入口に加え、
+        #            SUPPORTS/DERIVES を incoming 方向で辿ることで EVIDENCE を取得する。
+        # 旧実装 (max_depth=0, follow_edges=[]) では EVIDENCE が完全に排除されており、
+        # QASPER の WHAT 型クエリ（全体の約 86%）で BM25 に大幅に劣っていた根本原因。
+        entry_node_types=[NodeType.CLAIM, NodeType.DEFINITION, NodeType.CONCLUSION],
+        follow_edges=[EdgeType.SUPPORTS, EdgeType.DERIVES],
         exclude_node_types=[],
-        max_depth=0,
+        max_depth=2,
+        edge_directions={
+            EdgeType.SUPPORTS: "incoming",  # CLAIM ← EVIDENCE（主張を裏付ける具体事実）
+            EdgeType.DERIVES:  "incoming",  # CONCLUSION ← EVIDENCE（結論を導く根拠）
+        },
     ),
     QueryType.HOW: TraversalStrategy(
+        # 修正 (v2): ILLUSTRATES（視覚ノード → CLAIM）はテキスト論文にほぼ存在しない。
+        # SUPPORTS/DERIVES（incoming）に置き換え、手順・方法を支持する EVIDENCE を取得する。
         entry_node_types=[NodeType.CLAIM, NodeType.CONCLUSION],
-        follow_edges=[EdgeType.ILLUSTRATES, EdgeType.DERIVES],
+        follow_edges=[EdgeType.SUPPORTS, EdgeType.DERIVES],
         exclude_node_types=[],
         max_depth=3,
         edge_directions={
-            EdgeType.ILLUSTRATES: "incoming",
-            EdgeType.DERIVES:     "incoming",
+            EdgeType.SUPPORTS: "incoming",  # CLAIM ← EVIDENCE
+            EdgeType.DERIVES:  "incoming",  # CONCLUSION ← EVIDENCE
         },
     ),
     QueryType.EVIDENCE: TraversalStrategy(

@@ -29,6 +29,7 @@ from ap_rag.indexing.pipeline import IndexingPipeline, IndexingResult
 from ap_rag.models.taxonomy import TRAVERSAL_STRATEGIES, NodeType, QueryType
 from ap_rag.retrieval.context_builder import ContextBuilder, RetrievalContext
 from ap_rag.retrieval.query_classifier import QueryClassifier
+from ap_rag.retrieval.selector import BM25NodeSelector
 from ap_rag.retrieval.traversal import GraphTraverser
 
 logger = logging.getLogger(__name__)
@@ -43,6 +44,7 @@ class ArgumentativeRAGPipeline:
         traverser: グラフ探索器。
         context_builder: コンテキスト構築器。
         generator: 回答生成器。
+        node_selector: BM25 ベースの入口ノード選定器（省略時は内部でデフォルト生成）。
     """
 
     def __init__(
@@ -52,12 +54,14 @@ class ArgumentativeRAGPipeline:
         traverser: GraphTraverser,
         context_builder: ContextBuilder,
         generator: AnswerGenerator,
+        node_selector: BM25NodeSelector | None = None,
     ) -> None:
         self._store = store
         self._query_classifier = query_classifier
         self._traverser = traverser
         self._context_builder = context_builder
         self._generator = generator
+        self._node_selector = node_selector or BM25NodeSelector(top_k=10)
 
     def query(self, query: str, doc_id: str) -> GenerationResult:
         """クエリに対する回答を生成して返す。
@@ -73,8 +77,8 @@ class ArgumentativeRAGPipeline:
         query_type = self._query_classifier.classify(query)
         logger.info("クエリ型: %s — %r", query_type.value, query)
 
-        # Step 2: 入口ノードの選定
-        entry_nodes = self._select_entry_nodes(doc_id, query_type)
+        # Step 2: 入口ノードの選定（BM25 クエリ関連度フィルタ付き）
+        entry_nodes = self._select_entry_nodes(doc_id, query_type, query)
         if not entry_nodes:
             logger.warning("入口ノードが見つかりません: doc_id=%s", doc_id)
 
@@ -91,17 +95,37 @@ class ArgumentativeRAGPipeline:
 
     # ── private ────────────────────────────────────────────────────────────
 
-    def _select_entry_nodes(self, doc_id: str, query_type: QueryType):
-        """探索戦略に基づいて入口ノードを取得する。
+    def _select_entry_nodes(
+        self,
+        doc_id: str,
+        query_type: QueryType,
+        query: str,
+    ):
+        """探索戦略に基づいて入口ノードを取得し、BM25 でクエリ関連度フィルタをかける。
 
-        現在は戦略で指定された入口ノード型を全て返す（埋め込み選定は次フェーズ）。
-        TODO: E5-Mistral を使ってクエリとのコサイン類似度でTop-K選定に置き換える。
+        旧実装は「型に合致する全ノードを返す」だけで、350 ノードの論文では
+        150 以上の無関係な CLAIM が候補になっていた（クエリ盲目問題）。
+
+        改善 (v2):
+          1. 型で候補を絞る（従来通り）
+          2. BM25 でクエリとの関連度を計算し上位 top_k のみ返す
+          → BFS 探索の出発点が質問に関連したノードになり、
+            コンテキストの質が大幅に向上する。
         """
         strategy = TRAVERSAL_STRATEGIES[query_type]
-        entry_nodes = []
+        candidate_nodes: list = []
         for node_type in strategy.entry_node_types:
             nodes = self._store.get_nodes_by_type(doc_id, node_type)
-            entry_nodes.extend(nodes)
+            candidate_nodes.extend(nodes)
+
+        # BM25 でクエリ関連度の高い入口ノードのみに絞る
+        entry_nodes = self._node_selector.select(candidate_nodes, query)
+        logger.info(
+            "入口ノード: 候補 %d → BM25 選定後 %d (query_type=%s)",
+            len(candidate_nodes),
+            len(entry_nodes),
+            query_type.value,
+        )
         return entry_nodes
 
 

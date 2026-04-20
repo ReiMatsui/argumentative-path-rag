@@ -155,8 +155,19 @@ textarea { min-height: 120px; font-family: monospace; line-height: 1.5; }
       </div>
       <div class="btn-row">
         <button class="btn btn-primary" id="btn-index" onclick="indexDocument()" style="flex:1">グラフ構築</button>
-        <button class="btn btn-ghost btn-sm" onclick="loadDemo()">デモ文書</button>
+        <button class="btn btn-ghost btn-sm" onclick="loadDemo()">合成デモ</button>
       </div>
+      <!-- QASPER デモパネル -->
+      <div id="qasper-demo-panel" style="display:none;margin-top:10px;border:1px solid var(--accent);border-radius:8px;padding:12px;background:rgba(56,189,248,0.05);">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+          <span style="font-size:11px;font-weight:700;color:var(--accent);letter-spacing:.05em;">QASPER 論文デモ</span>
+          <a id="qasper-arxiv-link" href="#" target="_blank" style="font-size:10px;color:var(--sub);">arxiv ↗</a>
+        </div>
+        <div id="qasper-paper-title" style="font-size:12px;font-weight:600;color:var(--text);line-height:1.4;margin-bottom:4px;"></div>
+        <div id="qasper-paper-venue" style="font-size:11px;color:var(--sub);margin-bottom:8px;"></div>
+        <div style="font-size:11px;color:var(--sub);">↑ テキストをインデックスしてからクエリタブへ</div>
+      </div>
+      <button class="btn btn-ghost btn-sm" onclick="loadQasperDemo()" style="width:100%;margin-top:6px;border-color:var(--accent);color:var(--accent);">📄 QASPER 論文デモを読み込む</button>
       <div id="index-status"></div>
       <div id="index-stats" style="display:none">
         <div class="stats-row">
@@ -172,6 +183,11 @@ textarea { min-height: 120px; font-family: monospace; line-height: 1.5; }
 
     <!-- Query Tab -->
     <div id="tab-query" class="tab-panel">
+      <!-- QASPER 質問チップ (デモロード後に表示) -->
+      <div id="qasper-chips" style="display:none;margin-bottom:10px;">
+        <label style="display:block;margin-bottom:6px;">QASPER 質問を選択</label>
+        <div id="chips-container" style="display:flex;flex-direction:column;gap:4px;"></div>
+      </div>
       <div class="field">
         <label>質問</label>
         <textarea id="query-text" rows="3" placeholder="質問を入力してください…"></textarea>
@@ -192,6 +208,14 @@ textarea { min-height: 120px; font-family: monospace; line-height: 1.5; }
           <div class="result-box" style="border-color:var(--border)">
             <div class="result-label" style="color:#f59e0b">BM25RAG 回答</div>
             <div class="result-text" id="bm25-answer" style="color:var(--sub)"></div>
+          </div>
+        </div>
+        <!-- QASPER 正解 (デモ時のみ表示) -->
+        <div id="ground-truth-box" style="display:none;margin-top:10px;">
+          <label style="display:block;margin-bottom:6px;">QASPER 正解</label>
+          <div class="result-box" style="border-color:#22c55e44;">
+            <div class="result-label" style="color:#22c55e;">Ground Truth</div>
+            <div class="result-text" id="ground-truth-text" style="color:#86efac;"></div>
           </div>
         </div>
         <div style="margin-top:10px">
@@ -284,6 +308,8 @@ let currentDocId = 'demo';
 let traversalSteps = [];
 let layouts = ['fcose', 'breadthfirst'];
 let layoutIdx = 0;
+let _qasperQuestions = [];   // QASPER デモ質問リスト (id → {question, ground_truth})
+let _activeGroundTruth = ''; // 現在選択中の正解テキスト
 
 // ── Cytoscape 初期化 ──────────────────────────────────────────────────────────
 
@@ -388,6 +414,62 @@ function switchTab(name) {
 function loadDemo() {
   document.getElementById('doc-text').value = DEMO_TEXT;
   document.getElementById('doc-id').value = 'demo';
+  // QASPER パネルを非表示に
+  document.getElementById('qasper-demo-panel').style.display = 'none';
+  document.getElementById('qasper-chips').style.display = 'none';
+  _qasperQuestions = [];
+}
+
+// ── QASPER 論文デモ読み込み ────────────────────────────────────────────────────
+
+async function loadQasperDemo() {
+  try {
+    const res = await fetch('/api/demo');
+    if (!res.ok) throw new Error('デモデータの取得に失敗しました');
+    const data = await res.json();
+
+    // テキストと doc_id をフォームに設定
+    document.getElementById('doc-text').value = data.text;
+    document.getElementById('doc-id').value = data.paper_id;
+
+    // デモパネルを表示
+    const panel = document.getElementById('qasper-demo-panel');
+    panel.style.display = 'block';
+    document.getElementById('qasper-paper-title').textContent = data.title;
+    document.getElementById('qasper-paper-venue').textContent = data.venue;
+    document.getElementById('qasper-arxiv-link').href = data.arxiv_url;
+
+    // 質問チップを生成
+    _qasperQuestions = data.questions;
+    renderQuestionChips(data.questions);
+
+    setStatus('index-status', 'ok', '✓ QASPER 論文デモを読み込みました。「グラフ構築」でインデックスしてください。');
+  } catch (e) {
+    setStatus('index-status', 'error', '✗ ' + e.message);
+  }
+}
+
+function renderQuestionChips(questions) {
+  const container = document.getElementById('chips-container');
+  container.innerHTML = '';
+  const qtColors = { WHY:'#3b82f6', WHAT:'#22c55e', HOW:'#06b6d4', EVIDENCE:'#f59e0b', ASSUMPTION:'#a855f7' };
+
+  questions.forEach(q => {
+    const chip = document.createElement('button');
+    chip.className = 'btn btn-ghost btn-sm';
+    chip.style.cssText = `text-align:left;white-space:normal;line-height:1.4;padding:6px 8px;
+      border-color:${qtColors[q.query_type] || '#64748b'}33;`;
+    chip.innerHTML = `<span style="font-size:9px;font-weight:700;color:${qtColors[q.query_type]};margin-right:5px;">${q.query_type}</span>${q.question}`;
+    chip.onclick = () => {
+      document.getElementById('query-text').value = q.question;
+      _activeGroundTruth = q.ground_truth;
+      // クエリタブに切り替え
+      switchTab('query');
+    };
+    container.appendChild(chip);
+  });
+
+  document.getElementById('qasper-chips').style.display = 'block';
 }
 
 // ── インデックス ──────────────────────────────────────────────────────────────
@@ -512,6 +594,15 @@ async function runQuery() {
     badge.style.color = QT_COLORS[data.query_type] || '#f1f5f9';
     document.getElementById('ap-answer').textContent = data.answer;
     document.getElementById('bm25-answer').textContent = data.bm25_answer || '（取得なし）';
+
+    // QASPER 正解（チップ選択時のみ）
+    const gtBox = document.getElementById('ground-truth-box');
+    if (_activeGroundTruth) {
+      document.getElementById('ground-truth-text').textContent = _activeGroundTruth;
+      gtBox.style.display = 'block';
+    } else {
+      gtBox.style.display = 'none';
+    }
 
     // BM25 チャンク
     const chunksEl = document.getElementById('bm25-chunks');

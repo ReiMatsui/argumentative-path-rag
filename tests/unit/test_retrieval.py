@@ -84,14 +84,21 @@ class TestGraphTraverser:
         mock_store.get_neighbors.side_effect = _get_neighbors
         return mock_store
 
-    def test_what_type_returns_only_entry_nodes(self):
-        """WHAT 型は max_depth=0 なので探索せずエントリーのみ返す。"""
-        entry = _make_node(NodeType.CLAIM, "売上はいくらか。")
-        store = self._make_store()
+    def test_what_type_traverses_to_evidence(self):
+        """WHAT 型は SUPPORTS(incoming) で depth=2 まで EVIDENCE を取得する。
+
+        旧実装 (max_depth=0) では EVIDENCE が完全に無視されていた。
+        v2 修正により WHAT も SUPPORTS/DERIVES 辺を辿って具体的根拠を取得する。
+        """
+        claim = _make_node(NodeType.CLAIM, "使用した特徴量はいくつか。")
+        evidence = _make_node(NodeType.EVIDENCE, "特徴量 A, B, C を使用した。")
+        store = self._make_store(incoming_map={claim.id: [evidence]})
         traverser = GraphTraverser(store)
-        result = traverser.traverse([entry], QueryType.WHAT)
-        assert result == [entry]
-        store.get_neighbors.assert_not_called()
+        result = traverser.traverse([claim], QueryType.WHAT)
+        node_ids = {n.id for n in result}
+        assert claim.id in node_ids
+        assert evidence.id in node_ids  # EVIDENCE が取得される
+        store.get_neighbors.assert_called()  # 探索が行われた
 
     def test_why_type_traverses_to_evidence(self):
         """WHY 型は SUPPORTS(incoming) で EVIDENCE ノードまで辿る。"""

@@ -34,7 +34,9 @@ _NODE_TYPE_ORDER: dict[QueryType, list[NodeType]] = {
         NodeType.CLAIM, NodeType.CAVEAT,
     ],
     QueryType.WHAT: [
-        NodeType.CLAIM, NodeType.DEFINITION, NodeType.EVIDENCE,
+        # WHAT クエリでは具体的な事実・定義が最優先。
+        # EVIDENCE が後ろにあると max_nodes で切り捨てられていたため先頭に移動（v2修正）。
+        NodeType.DEFINITION, NodeType.EVIDENCE, NodeType.CLAIM, NodeType.CONCLUSION,
     ],
     QueryType.HOW: [
         NodeType.CLAIM, NodeType.EVIDENCE, NodeType.CONCLUSION,

@@ -1,0 +1,413 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RAG フロー比較</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'Segoe UI', 'Hiragino Sans', sans-serif;
+    background: #0f1117;
+    color: #e0e0e0;
+    padding: 24px;
+    min-height: 100vh;
+  }
+  h1 {
+    text-align: center;
+    font-size: 1.4rem;
+    color: #fff;
+    margin-bottom: 6px;
+    letter-spacing: 0.05em;
+  }
+  .subtitle {
+    text-align: center;
+    font-size: 0.82rem;
+    color: #888;
+    margin-bottom: 28px;
+  }
+
+  .columns {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 18px;
+    max-width: 1200px;
+    margin: 0 auto;
+  }
+
+  .col {
+    background: #1a1d27;
+    border-radius: 12px;
+    padding: 18px 16px;
+    border: 1px solid #2a2d3a;
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+  }
+
+  .col-header {
+    text-align: center;
+    padding: 10px 12px 12px;
+    border-radius: 8px;
+    margin-bottom: 16px;
+    font-weight: 700;
+    font-size: 0.95rem;
+    letter-spacing: 0.03em;
+  }
+  .col-bm25   .col-header { background: #1e2d1e; border: 1.5px solid #4caf50; color: #81c784; }
+  .col-old    .col-header { background: #2d1e1e; border: 1.5px solid #ef5350; color: #ef9a9a; }
+  .col-new    .col-header { background: #1e2438; border: 1.5px solid #42a5f5; color: #90caf9; }
+
+  /* ── ノードボックス ─────────────────────────────── */
+  .step {
+    border-radius: 8px;
+    padding: 10px 12px;
+    font-size: 0.78rem;
+    line-height: 1.5;
+    position: relative;
+    border: 1px solid transparent;
+  }
+  .step .label {
+    font-size: 0.65rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    margin-bottom: 3px;
+    opacity: 0.7;
+  }
+  .step .main { font-weight: 600; font-size: 0.82rem; color: #fff; }
+  .step .sub  { font-size: 0.72rem; color: #aaa; margin-top: 3px; }
+
+  /* ── 色テーマ ─────────────────────────────────── */
+  .s-query    { background: #23263a; border-color: #4a4f6a; }
+  .s-bm25     { background: #1b2d1b; border-color: #388e3c; }
+  .s-chunk    { background: #1b2d1b; border-color: #388e3c; }
+  .s-score    { background: #1e3020; border-color: #43a047; }
+  .s-result   { background: #1b2b1b; border-color: #4caf50; }
+  .s-generate { background: #2a2215; border-color: #ff8f00; }
+  .s-answer   { background: #252010; border-color: #ffc107; }
+
+  .s-classify { background: #2a2035; border-color: #7b1fa2; }
+  .s-entry    { background: #2d2020; border-color: #c62828; }
+  .s-entry-bad { background: #331a1a; border-color: #b71c1c; }
+  .s-trav-old { background: #2d2020; border-color: #d32f2f; }
+  .s-ctx-bad  { background: #301a1a; border-color: #c62828; }
+
+  .s-entry-new { background: #1a2535; border-color: #1565c0; }
+  .s-trav-new  { background: #1a2535; border-color: #1976d2; }
+  .s-ctx-new   { background: #152535; border-color: #0288d1; }
+
+  /* ── 問題バッジ ──────────────────────────────── */
+  .badge-bad {
+    display: inline-block;
+    background: #7f0000;
+    color: #ff8a80;
+    font-size: 0.62rem;
+    font-weight: 700;
+    padding: 1px 7px;
+    border-radius: 99px;
+    margin-left: 6px;
+    vertical-align: middle;
+    letter-spacing: 0.04em;
+  }
+  .badge-good {
+    display: inline-block;
+    background: #003d00;
+    color: #69f0ae;
+    font-size: 0.62rem;
+    font-weight: 700;
+    padding: 1px 7px;
+    border-radius: 99px;
+    margin-left: 6px;
+    vertical-align: middle;
+    letter-spacing: 0.04em;
+  }
+  .badge-fix {
+    display: inline-block;
+    background: #0d2244;
+    color: #64b5f6;
+    font-size: 0.62rem;
+    font-weight: 700;
+    padding: 1px 7px;
+    border-radius: 99px;
+    margin-left: 6px;
+    vertical-align: middle;
+    letter-spacing: 0.04em;
+  }
+
+  /* ── 矢印 ──────────────────────────────────── */
+  .arrow {
+    text-align: center;
+    color: #555;
+    font-size: 1.1rem;
+    padding: 4px 0;
+    line-height: 1;
+  }
+  .arrow.bad  { color: #c62828; }
+  .arrow.good { color: #388e3c; }
+  .arrow.fix  { color: #1976d2; }
+
+  /* ── ハイライトテキスト ──────────────────────── */
+  .txt-bad  { color: #ef9a9a; }
+  .txt-good { color: #a5d6a7; }
+  .txt-fix  { color: #90caf9; }
+
+  /* ── フッタ比較表 ──────────────────────────── */
+  .footer {
+    max-width: 1200px;
+    margin: 24px auto 0;
+    background: #1a1d27;
+    border-radius: 12px;
+    border: 1px solid #2a2d3a;
+    padding: 16px 20px;
+  }
+  .footer h2 { font-size: 0.9rem; color: #aaa; margin-bottom: 12px; letter-spacing: 0.05em; }
+  table { width: 100%; border-collapse: collapse; font-size: 0.78rem; }
+  th { text-align: left; padding: 6px 10px; color: #888; border-bottom: 1px solid #2a2d3a; font-weight: 600; font-size: 0.72rem; letter-spacing: 0.06em; text-transform: uppercase; }
+  td { padding: 7px 10px; border-bottom: 1px solid #1e2130; vertical-align: top; }
+  tr:last-child td { border-bottom: none; }
+  .td-metric { color: #ccc; font-weight: 600; }
+  .td-bm25   { color: #81c784; }
+  .td-old    { color: #ef9a9a; }
+  .td-new    { color: #90caf9; }
+</style>
+</head>
+<body>
+
+<h1>RAG クエリ処理フロー比較</h1>
+<p class="subtitle">BM25 ベースライン　／　旧 ArgumentativeRAG　／　改善後 ArgumentativeRAG（v2）</p>
+
+<div class="columns">
+
+  <!-- ═══════════════════════════════════════ BM25 ══ -->
+  <div class="col col-bm25">
+    <div class="col-header">🔍 BM25 ベースライン</div>
+
+    <div class="step s-query">
+      <div class="label">Step 1</div>
+      <div class="main">クエリ入力</div>
+      <div class="sub">例: "What features are used?"</div>
+    </div>
+
+    <div class="arrow good">↓</div>
+
+    <div class="step s-chunk">
+      <div class="label">Step 2 — チャンク取得</div>
+      <div class="main">BM25 スコアリング</div>
+      <div class="sub">クエリトークンの TF-IDF でチャンクをランク付け</div>
+    </div>
+
+    <div class="arrow good">↓</div>
+
+    <div class="step s-score">
+      <div class="label">Step 3 — 上位取得</div>
+      <div class="main">Top-K チャンク選択</div>
+      <div class="sub">"features" が含まれるセクションが高スコア<br>語彙一致で直接到達 <span class="badge-good">強み</span></div>
+    </div>
+
+    <div class="arrow good">↓</div>
+
+    <div class="step s-result">
+      <div class="label">Step 4 — コンテキスト</div>
+      <div class="main">チャンクをそのまま連結</div>
+      <div class="sub">議論構造の区別なし（CLAIM/EVIDENCE 混在）<br>論理的つながりは無視 <span class="badge-bad">弱点</span></div>
+    </div>
+
+    <div class="arrow good">↓</div>
+
+    <div class="step s-generate">
+      <div class="label">Step 5 — 生成</div>
+      <div class="main">LLM 回答生成</div>
+      <div class="sub">関連セクションを直接参照できるため<br>WHAT クエリに強い</div>
+    </div>
+
+    <div class="arrow good">↓</div>
+
+    <div class="step s-answer">
+      <div class="label">出力</div>
+      <div class="main">回答</div>
+      <div class="sub txt-good">Faithfulness: 0.929（QASPER実測）</div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════ 旧 ArgRAG ══ -->
+  <div class="col col-old">
+    <div class="col-header">⚠️ 旧 ArgumentativeRAG（v1）</div>
+
+    <div class="step s-query">
+      <div class="label">Step 1</div>
+      <div class="main">クエリ入力</div>
+      <div class="sub">例: "What features are used?"</div>
+    </div>
+
+    <div class="arrow">↓</div>
+
+    <div class="step s-classify">
+      <div class="label">Step 2 — クエリ分類</div>
+      <div class="main">LLM でクエリ型判定</div>
+      <div class="sub">→ WHAT 型に分類（正しい）</div>
+    </div>
+
+    <div class="arrow bad">↓</div>
+
+    <div class="step s-entry-bad">
+      <div class="label">Step 3 — 入口選定 <span class="badge-bad">問題①</span></div>
+      <div class="main">型で全ノードを取得</div>
+      <div class="sub">CLAIM ノード 150個 を全て取得<br>クエリとの関連度ゼロ<br>→ "features" と無関係な CLAIM が多数混入</div>
+    </div>
+
+    <div class="arrow bad">↓</div>
+
+    <div class="step s-trav-old">
+      <div class="label">Step 4 — グラフ探索 <span class="badge-bad">問題②</span></div>
+      <div class="main">WHAT: max_depth=0, edges=[]</div>
+      <div class="sub">探索なし。入口ノードをそのまま返す<br>EVIDENCE ノードが完全に無視される</div>
+    </div>
+
+    <div class="arrow bad">↓</div>
+
+    <div class="step s-ctx-bad">
+      <div class="label">Step 5 — コンテキスト <span class="badge-bad">問題③</span></div>
+      <div class="main">上位15 CLAIM を切り出し</div>
+      <div class="sub">・特徴量の詳細（EVIDENCE）はゼロ件<br>・クエリと無関係な CLAIM が15件<br>→ LLM がハルシネーション</div>
+    </div>
+
+    <div class="arrow bad">↓</div>
+
+    <div class="step s-generate">
+      <div class="label">Step 6 — 生成</div>
+      <div class="main">LLM 回答生成</div>
+      <div class="sub">コンテキストが無関係 → 誤回答・幻覚が多発</div>
+    </div>
+
+    <div class="arrow bad">↓</div>
+
+    <div class="step s-answer">
+      <div class="label">出力</div>
+      <div class="main">回答</div>
+      <div class="sub txt-bad">Faithfulness: 0.714（BM25 に大幅劣後）</div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════ 改善後 ArgRAG ══ -->
+  <div class="col col-new">
+    <div class="col-header">✅ 改善後 ArgumentativeRAG（v2）</div>
+
+    <div class="step s-query">
+      <div class="label">Step 1</div>
+      <div class="main">クエリ入力</div>
+      <div class="sub">例: "What features are used?"</div>
+    </div>
+
+    <div class="arrow fix">↓</div>
+
+    <div class="step s-classify">
+      <div class="label">Step 2 — クエリ分類</div>
+      <div class="main">LLM でクエリ型判定</div>
+      <div class="sub">→ WHAT 型に分類</div>
+    </div>
+
+    <div class="arrow fix">↓</div>
+
+    <div class="step s-entry-new">
+      <div class="label">Step 3 — 入口選定 <span class="badge-fix">修正①</span></div>
+      <div class="main">BM25 で関連ノード上位10件</div>
+      <div class="sub">CLAIM 150件 → BM25スコアリング → 上位10件<br>"features" を含む CLAIM を優先選択<br>クエリ盲目問題を解消</div>
+    </div>
+
+    <div class="arrow fix">↓</div>
+
+    <div class="step s-trav-new">
+      <div class="label">Step 4 — グラフ探索 <span class="badge-fix">修正②</span></div>
+      <div class="main">WHAT: SUPPORTS/DERIVES 辺を追跡</div>
+      <div class="sub">max_depth=2 で BFS 探索<br>CLAIM ←[SUPPORTS]← EVIDENCE を取得<br>「特徴量 A, B, C を使用」等の具体情報を収集</div>
+    </div>
+
+    <div class="arrow fix">↓</div>
+
+    <div class="step s-ctx-new">
+      <div class="label">Step 5 — コンテキスト <span class="badge-fix">修正③</span></div>
+      <div class="main">DEFINITION → EVIDENCE → CLAIM 順で整形</div>
+      <div class="sub">・EVIDENCE が優先的にコンテキスト先頭へ<br>・役割ラベル付き（【根拠】【主張】等）<br>・論理構造を保った高品質コンテキスト</div>
+    </div>
+
+    <div class="arrow fix">↓</div>
+
+    <div class="step s-generate">
+      <div class="label">Step 6 — 生成</div>
+      <div class="main">LLM 回答生成</div>
+      <div class="sub">関連 EVIDENCE + 論理構造で<br>根拠付きの正確な回答が可能</div>
+    </div>
+
+    <div class="arrow fix">↓</div>
+
+    <div class="step s-answer">
+      <div class="label">出力</div>
+      <div class="main">回答</div>
+      <div class="sub txt-fix">Faithfulness: 改善期待（再評価が必要）<br>WHY/HOW/EVIDENCE でも適用</div>
+    </div>
+  </div>
+
+</div>
+
+<!-- ── 比較表 ──────────────────────────────── -->
+<div class="footer">
+  <h2>▸ 3手法の比較サマリ</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>観点</th>
+        <th class="td-bm25">BM25 ベースライン</th>
+        <th class="td-old">旧 ArgRAG (v1)</th>
+        <th class="td-new">改善後 ArgRAG (v2)</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td class="td-metric">クエリ関連度での取得</td>
+        <td class="td-bm25">✅ TF-IDF で常に関連</td>
+        <td class="td-old">❌ 型のみ・クエリ無視</td>
+        <td class="td-new">✅ BM25 で上位10件</td>
+      </tr>
+      <tr>
+        <td class="td-metric">EVIDENCE 取得（WHAT）</td>
+        <td class="td-bm25">✅ 直接含まれる</td>
+        <td class="td-old">❌ 完全に無視（depth=0）</td>
+        <td class="td-new">✅ SUPPORTS辺で取得</td>
+      </tr>
+      <tr>
+        <td class="td-metric">議論構造の活用</td>
+        <td class="td-bm25">❌ 構造なし・平坦</td>
+        <td class="td-old">△ 構造はあるが到達しない</td>
+        <td class="td-new">✅ CLAIM→EVIDENCE の因果を追跡</td>
+      </tr>
+      <tr>
+        <td class="td-metric">WHY クエリ</td>
+        <td class="td-bm25">△ キーワードに依存</td>
+        <td class="td-old">✅ SUPPORTS/DERIVES 正常動作</td>
+        <td class="td-new">✅ BM25入口+グラフ探索</td>
+      </tr>
+      <tr>
+        <td class="td-metric">HOW クエリ</td>
+        <td class="td-bm25">△ キーワードに依存</td>
+        <td class="td-old">❌ ILLUSTRATES辺が存在しない</td>
+        <td class="td-new">✅ SUPPORTS/DERIVESに変更</td>
+      </tr>
+      <tr>
+        <td class="td-metric">Faithfulness (QASPER)</td>
+        <td class="td-bm25">0.929</td>
+        <td class="td-old">0.714 (BM25より△0.215低)</td>
+        <td class="td-new">再評価待ち（改善見込み）</td>
+      </tr>
+      <tr>
+        <td class="td-metric">コンテキスト汚染リスク</td>
+        <td class="td-bm25">低（関連チャンク）</td>
+        <td class="td-old">高（無関係CLAIMが混入）</td>
+        <td class="td-new">低（BM25+型フィルタ）</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+</body>
+</html>
