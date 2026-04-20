@@ -125,7 +125,10 @@ class BM25NodeSelector:
             IDF(q)      = log((N - df(q) + 0.5) / (df(q) + 0.5) + 1)
         """
         # ── 前処理 ──────────────────────────────────────────────────────────────
-        tokenized: list[list[str]] = [_tokenize(n.text) for n in nodes]
+        # パラフレーズで固有名詞・数値が消えないよう、verbatim_text を優先。
+        tokenized: list[list[str]] = [
+            _tokenize(getattr(n, "verbatim_text", None) or n.text) for n in nodes
+        ]
         term_freqs: list[Counter[str]] = [Counter(toks) for toks in tokenized]
         doc_lens: list[int] = [len(toks) for toks in tokenized]
         avgdl: float = sum(doc_lens) / len(doc_lens) if doc_lens else 1.0

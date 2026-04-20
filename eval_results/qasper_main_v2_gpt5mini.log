@@ -1,0 +1,90 @@
+╭───────────────────────────────────────────────────────────────────────────────────────────────────╮
+│ QASPER ミニ評価 — Argumentative-Path RAG                                                          │
+│ 論文 3 件 × 各 5 問 / LLM-as-Judge: 有効 / Dense: 有効 / 入口選定: text-embedding-3-small         │
+│ classifier=gpt-5-mini / generator=gpt-5-mini / judge=gpt-5-mini / Backend: text-embedding-3-small │
+╰───────────────────────────────────────────────────────────────────────────────────────────────────╯
+──────────────────────────────────────────────────────────────────────────────────────────────── Step 1: QASPERデータロード ─────────────────────────────────────────────────────────────────────────────────────────────────
+QASPER をロード中... (論文3件 × 各5問)
+  LLM クエリ型分類中... (8 件)
+  ✓ ロード完了 — 論文 3 件, QAペア 8 件
+  クエリ型分布 (LLM): WHAT:8
+  共有 encoder: OpenAI text-embedding-3-small
+───────────────────────────────────────────────────────────────────────────────────────────────── Step 2: インデックス構築 ──────────────────────────────────────────────────────────────────────────────────────────────────
+ArgumentativeRAG:
+  入口選定モデル: openai:text-embedding-3-small (device=cpu)
+  (1/3) インデックス中: 1912.01214...
+WARNING:ap_rag.indexing.classifier:chunk_idx=7: source_span が passage に実在しません (len=206). LLM がパラフレーズした可能性。span の先頭: 'which leverages a high-resource pivot$\x02142\x0203$target model (parent) to initializ'
+WARNING:ap_rag.indexing.classifier:chunk_idx=13: source_span が passage に実在しません (len=62). LLM がパラフレーズした可能性。span の先頭: 'designed to make full use of the source$\x12$pivot bilingual data'
+WARNING:ap_rag.indexing.classifier:chunk_idx=16: source_span が passage に実在しません (len=116). LLM がパラフレーズした可能性。span の先頭: 'Pivot-based Method is a common strategy to obtain a source$\rightarrow $target mo'
+WARNING:ap_rag.indexing.classifier:chunk_idx=16: source_span が passage に実在しません (len=40). LLM がパラフレーズした可能性。span の先頭: 'obtain a source$\rightarrow $target model'
+WARNING:ap_rag.indexing.classifier:chunk_idx=17: source_span が passage に実在しません (len=146). LLM がパラフレーズした可能性。span の先頭: 'the latter trains a source$\rightarrow $target model with pseudo data generated f'
+WARNING:ap_rag.indexing.classifier:chunk_idx=17: source_span が passage に実在しません (len=301). LLM がパラフレーズした可能性。span の先頭: 'While the former firstly translates a source language into the pivot language wh'
+WARNING:ap_rag.indexing.classifier:chunk_idx=24: source_span が passage に実在しません (len=122). LLM がパラフレーズした可能性。span の先頭: 'Train a pivot$\rightarrow $target parent model built on the pre-trained universal'
+WARNING:ap_rag.indexing.classifier:chunk_idx=33: source_span が passage に実在しません (len=137). LLM がパラフレーズした可能性。span の先頭: 'We first use external aligner tool on source$\x08\\leftrightarrow $pivot parallel da'
+WARNING:ap_rag.indexing.classifier:chunk_idx=33: source_span が passage に実在しません (len=74). LLM がパラフレーズした可能性。span の先頭: 'During model training, given source$\x08\\leftrightarrow $pivot sentence pair,'
+WARNING:ap_rag.indexing.classifier:chunk_idx=40: source_span が passage に実在しません (len=122). LLM がパラフレーズした可能性。span の先頭: 'In the transfer phase, we train pivot$\rightarrow $target NMT model initialized b'
+WARNING:ap_rag.indexing.classifier:chunk_idx=40: source_span が passage に実在しません (len=99). LLM がパラフレーズした可能性。span の先頭: 'we train pivot$\rightarrow $target NMT model initialized by the cross-lingually p'
+WARNING:ap_rag.indexing.classifier:chunk_idx=40: source_span が passage に実在しません (len=113). LLM がパラフレーズした可能性。span の先頭: 'and finally transfer the trained NMT model to source$\rightarrow $target translat'
+WARNING:ap_rag.indexing.classifier:chunk_idx=40: source_span が passage に実在しません (len=160). LLM がパラフレーズした可能性。span の先頭: 'Note that during training pivot$\rightarrow $target NMT model, we freeze several '
+WARNING:ap_rag.indexing.classifier:chunk_idx=39: source_span が passage に実在しません (len=196). LLM がパラフレーズした可能性。span の先頭: 'Our proposed cross-lingual pretraining based transfer approach for source$\righta'
+WARNING:ap_rag.indexing.classifier:chunk_idx=52: source_span が passage に実在しません (len=65). LLM がパラフレーズした可能性。span の先頭: 'because of not using source$\x12\\leftrightarrow $pivot parallel data'
+WARNING:ap_rag.indexing.classifier:chunk_idx=53: source_span が passage に実在しません (len=67). LLM がパラフレーズした可能性。span の先頭: 'Meanwhile, in the supervised direction of pivot$\rightarrow $target,'
+WARNING:ap_rag.indexing.classifier:chunk_idx=53: source_span が passage に実在しません (len=58). LLM がパラフレーズした可能性。span の先頭: 'MLM alone that does not use source$\x0214$pivot parallel data'
+WARNING:ap_rag.indexing.classifier:chunk_idx=56: source_span が passage に実在しません (len=110). LLM がパラフレーズした可能性。span の先頭: 'MLM+BRLM-SA still achieves better performances on Es $\x087\x088$ Ar and Es $\x087\x088$ Ru '
+WARNING:ap_rag.indexing.classifier:chunk_idx=56: source_span が passage に実在しません (len=29). LLM がパラフレーズした可能性。span の先頭: 'Es $\x087\x088$ Ar and Es $\x087\x088$ Ru'
+WARNING:ap_rag.indexing.classifier:chunk_idx=56: source_span が passage に実在しません (len=25). LLM がパラフレーズした可能性。span の先頭: 'strong pivoting$_{\rm m}$,'
+WARNING:ap_rag.indexing.classifier:chunk_idx=66: source_span が passage に実在しません (len=121). LLM がパラフレーズした可能性。span の先頭: 'for smooth transfer of the parent model of pivot$\x02126$target direction to the ch'
+
+    ✓ ノード 377 / エッジ 269
+  (2/3) インデックス中: 1810.08699...
+WARNING:ap_rag.indexing.classifier:chunk_idx=20: source_span が passage に実在しません (len=215). LLM がパラフレーズした可能性。span の先頭: '"ԱՄՆ նախագահական ընտրություններում" ("USA presidential elections") is linked to '
+
+    ✓ ノード 249 / エッジ 172
+  (3/3) インデックス中: 1609.00425...
+WARNING:ap_rag.indexing.classifier:chunk_idx=28: source_span が passage に実在しません (len=49). LLM がパラフレーズした可能性。span の先頭: 'I often used with a hedge (“I think” or “I know")'
+WARNING:ap_rag.indexing.classifier:chunk_idx=28: source_span が passage に実在しません (len=142). LLM がパラフレーズした可能性。span の先頭: 'you and they tend to characterize the beliefs of others, often in a strongly opi'
+
+    ✓ ノード 394 / エッジ 284
+  合計: ノード 1020 / エッジ 725
+BM25RAG:
+  ✓ BM25 インデックス完了 — 総チャンク数: 176
+DenseRAG:
+  Dense 埋め込みモデル: openai:text-embedding-3-small (device=cpu)
+  ✓ Dense インデックス完了 — 総チャンク数: 176
+
+LLM-as-Judge: 有効 (model=gpt-5-mini)
+
+───────────────────────────────────────────────────────────────────────────────────────────────────── Step 3: 評価実行 ──────────────────────────────────────────────────────────────────────────────────────────────────────
+評価中: ArgumentativeRAG
+評価中... ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 8/8 0:01:56
+評価中: BM25RAG
+評価中... ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 8/8 0:01:05
+評価中: DenseRAG
+WARNING:ap_rag.evaluation.evaluator:LLM judge 失敗: Error code: 400 - {'error': {'message': 'Could not finish the message because max_tokens or model output limit was reached. Please try again with higher max_tokens.', 'type': 'invalid_request_error', 'param': None, 'code': None}}
+WARNING:ap_rag.evaluation.evaluator:LLM judge 失敗: Error code: 400 - {'error': {'message': 'Could not finish the message because max_tokens or model output limit was reached. Please try again with higher max_tokens.', 'type': 'invalid_request_error', 'param': None, 'code': None}}
+評価中... ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 8/8 0:01:10
+───────────────────────────────────────────────────────────────────────────────────────────────────────── 評価結果 ──────────────────────────────────────────────────────────────────────────────────────────────────────────
+                                          QASPER ミニ評価: AP-RAG vs BM25 vs Dense                                           
+┏━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━┳━━━━━━━━━━┳━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━┳━━━━━━━┓
+┃ システム               ┃       EM ┃       F1 ┃   Evidence-F1↑ ┃   Correctness↑ ┃  Faithfulness↑ ┃  Hallucination↓ ┃     N ┃
+┡━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━╇━━━━━━━━━━╇━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━╇━━━━━━━┩
+│ ArgumentativeRAG       │    0.000 │    0.050 │          0.379 │          0.688 │          0.500 │           0.000 │     8 │
+│ BM25RAG                │    0.000 │    0.128 │          0.385 │          0.500 │          0.562 │           0.000 │     8 │
+│ DenseRAG               │    0.000 │    0.186 │          0.461 │          0.583 │          0.500 │           0.000 │     8 │
+└────────────────────────┴──────────┴──────────┴────────────────┴────────────────┴────────────────┴─────────────────┴───────┘
+─────────────────────────────────────────────────────────────────────────────────────────────────── クエリ型別 F1 スコア ────────────────────────────────────────────────────────────────────────────────────────────────────
+┏━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━┳━━━━━━━━━┳━━━━━━━━━━┳━━━━━━━━━━━━┓
+┃ クエリ型       ┃ ArgumentativeRAG ┃ BM25RAG ┃ DenseRAG ┃ サンプル数 ┃
+┡━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━╇━━━━━━━━━╇━━━━━━━━━━╇━━━━━━━━━━━━┩
+│ WHAT           │            0.050 │   0.128 │    0.186 │          8 │
+└────────────────┴──────────────────┴─────────┴──────────┴────────────┘
+─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+⚠️  BM25RAG の方が F1 が 0.078 高い
+  vs BM25RAG: Faithfulness 差 -0.062 / Hallucination 削減 +0.000
+  vs BM25RAG: Evidence-F1 差 -0.006 (AP=0.379 / BM25RAG=0.385)
+⚠️  DenseRAG の方が F1 が 0.136 高い
+  vs DenseRAG: Faithfulness 差 +0.000 / Hallucination 削減 +0.000
+  vs DenseRAG: Evidence-F1 差 -0.082 (AP=0.379 / DenseRAG=0.461)
+
+✅ QASPER ミニ評価完了！
+📄 結果を保存: eval_results/qasper_main_v2_gpt5mini.json

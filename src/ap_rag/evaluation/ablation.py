@@ -18,6 +18,7 @@ from typing import Any
 from ap_rag.evaluation.baselines import BaselineResult, _TextNode, BM25RAG
 from ap_rag.models.graph import ArgumentNode
 from ap_rag.models.taxonomy import NodeType, QueryType, TRAVERSAL_STRATEGIES
+from ap_rag.openai_compat import max_tokens_kwarg, reasoning_kwarg, sampling_kwargs
 
 logger = logging.getLogger(__name__)
 
@@ -66,8 +67,9 @@ Text: {text}
                     "role": "user",
                     "content": self._REWRITE_PROMPT.format(text=text),
                 }],
-                temperature=0.1,
-                max_tokens=300,
+                **sampling_kwargs(self._model, temperature=0.1),
+                **max_tokens_kwarg(self._model, 300),
+                **reasoning_kwarg(self._model),
             )
             return (response.choices[0].message.content or text).strip()
         except Exception as e:

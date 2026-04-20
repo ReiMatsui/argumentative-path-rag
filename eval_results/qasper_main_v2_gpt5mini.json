@@ -1,0 +1,672 @@
+{
+  "config": {
+    "num_papers": 3,
+    "num_questions": 5,
+    "use_judge": true,
+    "use_dense": true,
+    "use_cross_chunk": false,
+    "embedding_backend": "openai",
+    "openai_embedding_model": "text-embedding-3-small",
+    "consistency_runs": 1,
+    "classifier_model": "gpt-5-mini",
+    "generator_model": "gpt-5-mini",
+    "judge_model": "gpt-5-mini"
+  },
+  "results": {
+    "ArgumentativeRAG": {
+      "em": 0.0,
+      "f1": 0.04985482122977754,
+      "faithfulness": 0.5,
+      "hallucination_rate": 0.0,
+      "citation_accuracy": null,
+      "answer_correctness": 0.6875,
+      "answer_consistency": null,
+      "evidence_f1": 0.3786037146932052,
+      "num_samples": 8,
+      "per_query_type": {
+        "WHAT": {
+          "em": 0.0,
+          "f1": 0.04985482122977754,
+          "count": 8,
+          "evidence_f1": 0.3786037146932052
+        }
+      },
+      "raw_scores": [],
+      "per_sample": [
+        {
+          "question": "which multilingual approaches do they compare with?",
+          "query_type": "WHAT",
+          "doc_id": "1912.01214",
+          "ground_truth": "BIBREF19 ... BIBREF20",
+          "predicted": "主張:\n- 比較対象としている多言語（クロスリンガル）アプローチは、Masked Language Modeling (MLM) と Translation Language Modeling (TLM) である（[CLAIM]）。\n\n根拠:\n- 参照情報に「Two existing cross-lingual pre-training methods, Masked Language Modeling (MLM) and Translation Language Modeling (TLM)」と明記されている（[根拠]）。",
+          "retrieved_contexts": [
+            "Two existing cross-lingual pre-training methods, Masked Language Modeling (MLM) and Translation Language Modeling (TLM),",
+            "in which source and target languages have no parallel data,",
+            "while they both have parallel data with a high resource pivot language.",
+            "BIBREF19, BIBREF20, BIBREF23.",
+            "Then we calculate the cosine similarity for each sentence pair and average all cosine scores.",
+            "we adopt max-pooling operation to collect the sentence representation of each encoder layer",
+            "Section: Approach",
+            "Section: Approach ::: Masked and Translation Language Model Pretraining",
+            "Section: Approach ::: Bridge Language Model Pretraining",
+            "Section: Approach ::: Transfer Protocol",
+            "Section: Experiments ::: Setup",
+            "Section: Experiments ::: Setup ::: Datasets.",
+            "Europarl BIBREF31 and MultiUN BIBREF32",
+            "which contain multi-parallel evaluation data to assess the zero-shot performance",
+            "and the whole training process can be summarized as follows step by step:"
+          ],
+          "gold_evidence": [
+            "Table TABREF19 and TABREF26 report zero-shot results on Europarl and Multi-UN evaluation sets, respectively. We compare our approaches with related approaches of pivoting, multilingual NMT (MNMT) BIBREF19, and cross-lingual transfer without pretraining BIBREF16. The results show that our approaches consistently outperform other approaches across languages and datasets, especially surpass pivoting, which is a strong baseline in the zero-shot scenario that multilingual NMT systems often fail to beat BIBREF19, BIBREF20, BIBREF23. Pivoting translates source to pivot then to target in two steps, causing inefficient translation process. Our approaches use one encoder-decoder model to translate between any zero-shot directions, which is more efficient than pivoting. Regarding the comparison between transfer approaches, our cross-lingual pretraining based transfer outperforms transfer method that does not use pretraining by a large margin."
+          ],
+          "em": 0.0,
+          "f1": 0.0,
+          "evidence_f1": 0.31451612903225806
+        },
+        {
+          "question": "what are the pivot-based baselines?",
+          "query_type": "WHAT",
+          "doc_id": "1912.01214",
+          "ground_truth": "pivoting ... pivoting$_{\\rm m}$",
+          "predicted": "回答は参照情報の範囲内でのみ行います。\n\n要点（pivot-based baselines の内容）：\n- 定義／手法（記載されたベースラインの中身）  \n  - 「ピボット法（pivoting）」：ソース→ピボット言語に翻訳し、その出力をピボット→ターゲットに再翻訳する2段階の翻訳。ソース↔ピボットおよびピボット↔ターゲットの並列データは豊富にあるがソース↔ターゲット並列データはない設定で用いられる（【定義】, 【定義】）。  \n  - 「ピボットを用いた疑似データ学習」：ソース↔ピボットまたはピボット↔ターゲット並列データから生成した疑似データでソース→ターゲットモデルを訓練する手法（【定義】, 「the latter trains ... with pseudo data」【定義】）。  \n- 性能・特性に関する主張・根拠  \n  - 表 TABREF19 の比較では、ピボット法（pivoting）が他の2つのベースラインより有意に強いベースラインであるとされる（主張：「pivoting is the strongest baseline...」, 根拠：table TABREF19）。  \n  - ピボット法はゼロショット場面で強いベースラインであり、悪くない性能が出るとされる（主張：「pivot-based methods can achieve not bad performance」「pivoting, which is a strong baseline in the zero-shot scenario」）。  \n  - 欠点としてはデコード時間が倍になる（主張：「the pivot-based method requires doubled decoding time」）。  \n- 補足／設定差異  \n  - 文献での具体例としては、アラビア語（source）→英語（pivot）→スペイン語（target）のような2段階翻訳が挙げられている（根拠：BIBREF4, BIBREF5 を引用した説明）。  \n  - MLM（別手法）では source↔pivot 並列データを使わない設定がある点が言及されている（根拠：「MLM here does not use source↔pivot parallel data」）。\n\n結論（簡潔に）：\n参照情報に基づく「pivot-based baselines」は主に（1）2段階のピボット翻訳（pivoting）と（2）ピボットを用いて生成した疑似データで学習する手法、の2種類を指します。これらは表 TABREF19 での強力なベースラインとして扱われ、性能は良好だがデコード時間が倍になるとされます（上記の主張・根拠参照）。",
+          "retrieved_contexts": [
+            "Pivot-based Method is a common strategy to obtain a source$\rightarrow $target model by introducing a pivot language.",
+            "Definition/description of strong pivoting_m method",
+            "Pivoting translates source to pivot then to target in two steps,",
+            "where there are a lot of source$\\leftrightarrow $pivot and pivot$\\leftrightarrow $target parallel data but no source$\\leftrightarrow $target parallel data.",
+            "the latter trains a source$\rightarrow $target model with pseudo data generated from source-pivot or pivot-target parallel data BIBREF13, BIBREF14.",
+            "table TABREF19",
+            "that multilingual NMT systems often fail to beat",
+            ", Arabic (source) sentence is translated to English (pivot) first which is later translated to Spanish (target) BIBREF4, BIBREF5.",
+            "MLM here does not use source↔pivot parallel data (description of MLM setup)",
+            "Regarding comparison between the baselines in table TABREF19, we find that pivoting is the strongest baseline that has significant advantage over other two baselines.",
+            "the pivot-based methods can achieve not bad performance",
+            "pivoting, which is a strong baseline in the zero-shot scenario",
+            "the pivot-based method requires doubled decoding time",
+            "and achieves comparable results to pivoting."
+          ],
+          "gold_evidence": [
+            "Table TABREF19 and TABREF26 report zero-shot results on Europarl and Multi-UN evaluation sets, respectively. We compare our approaches with related approaches of pivoting, multilingual NMT (MNMT) BIBREF19, and cross-lingual transfer without pretraining BIBREF16. The results show that our approaches consistently outperform other approaches across languages and datasets, especially surpass pivoting, which is a strong baseline in the zero-shot scenario that multilingual NMT systems often fail to beat BIBREF19, BIBREF20, BIBREF23. Pivoting translates source to pivot then to target in two steps, causing inefficient translation process. Our approaches use one encoder-decoder model to translate between any zero-shot directions, which is more efficient than pivoting. Regarding the comparison between transfer approaches, our cross-lingual pretraining based transfer outperforms transfer method that does not use pretraining by a large margin.",
+            "Although it is challenging for one model to translate all zero-shot directions between multiple distant language pairs of MultiUN, MLM+BRLM-SA still achieves better performances on Es $\\rightarrow $ Ar and Es $\\rightarrow $ Ru than strong pivoting$_{\\rm m}$, which uses MNMT to translate source to pivot then to target in two separate steps with each step receiving supervised signal of parallel corpora. Our approaches surpass pivoting$_{\\rm m}$ in all zero-shot directions by adding back translation BIBREF33 to generate pseudo parallel sentences for all zero-shot directions based on our pretrained models such as MLM+BRLM-SA, and further training our universal encoder-decoder model with these pseudo data. BIBREF22 gu2019improved introduces back translation into MNMT, while we adopt it in our transfer approaches. Finally, our best MLM+BRLM-SA with back translation outperforms pivoting$_{\\rm m}$ by 2.4 BLEU points averagely, and outperforms MNMT BIBREF22 by 4.6 BLEU points averagely. Again, in supervised translation directions, MLM+BRLM-SA with back translation also achieves better performance than the original supervised Transformer.",
+            "We use traditional transfer learning, pivot-based method and multilingual NMT as our baselines. For the fair comparison, the Transformer-big model with 1024 embedding/hidden units, 4096 feed-forward filter size, 6 layers and 8 heads per layer is adopted for all translation models in our experiments. We set the batch size to 2400 per batch and limit sentence length to 100 BPE tokens. We set the $\\text{attn}\\_\\text{drop}=0$ (a dropout rate on each attention head), which is favorable to the zero-shot translation and has no effect on supervised translation directions BIBREF22. For the model initialization, we use Facebook's cross-lingual pretrained models released by XLM to initialize the encoder part, and the rest parameters are initialized with xavier uniform. We employ the Adam optimizer with $\\text{lr}=0.0001$, $t_{\\text{warm}\\_\\text{up}}=4000$ and $\\text{dropout}=0.1$. At decoding time, we generate greedily with length penalty $\\alpha =1.0$.",
+            "Pivot-based Method is a common strategy to obtain a source$\\rightarrow $target model by introducing a pivot language. This approach is further divided into pivoting and pivot-synthetic. While the former firstly translates a source language into the pivot language which is later translated to the target language BIBREF4, BIBREF5, BIBREF12, the latter trains a source$\\rightarrow $target model with pseudo data generated from source-pivot or pivot-target parallel data BIBREF13, BIBREF14. Although the pivot-based methods can achieve not bad performance, it always falls into a computation-expensive and parameter-vast dilemma of quadratic growth in the number of source languages, and suffers from the error propagation problem BIBREF15."
+          ],
+          "em": 0.0,
+          "f1": 0.017094017094017096,
+          "evidence_f1": 0.37572254335260113
+        },
+        {
+          "question": "which datasets did they experiment with?",
+          "query_type": "WHAT",
+          "doc_id": "1912.01214",
+          "ground_truth": "Europarl ... MultiUN",
+          "predicted": "主張:\n- 実験で用いられたデータセットは Europarl と MultiUN です。\n\n根拠（EVIDENCE）:\n- 参照情報に「Europarl BIBREF31 and MultiUN BIBREF32」と明記されており、「which contain multi-parallel evaluation data to assess the zero-shot performance」としてゼロショット評価用のマルチパラレルデータであると述べられています（Section: Experiments ::: Setup ::: Datasets を含む参照箇所）。",
+          "retrieved_contexts": [
+            "BIBREF19, BIBREF20, BIBREF23.",
+            "Section: Approach",
+            "Section: Approach ::: Masked and Translation Language Model Pretraining",
+            "Section: Approach ::: Bridge Language Model Pretraining",
+            "Section: Approach ::: Transfer Protocol",
+            "Section: Experiments ::: Setup",
+            "Section: Experiments ::: Setup ::: Datasets.",
+            "Europarl BIBREF31 and MultiUN BIBREF32",
+            "which contain multi-parallel evaluation data to assess the zero-shot performance",
+            "Although these methods are successful in the low-resource scene,",
+            "that multilingual NMT systems often fail to beat",
+            "which forces the model to forget the specific knowledge from parent data and learn new features from child data.",
+            "Then we calculate the cosine similarity for each sentence pair and average all cosine scores.",
+            "we adopt max-pooling operation to collect the sentence representation of each encoder layer",
+            "table TABREF19"
+          ],
+          "gold_evidence": [
+            "We evaluate our cross-lingual pre-training based transfer approach against several strong baselines on two public datatsets, Europarl BIBREF31 and MultiUN BIBREF32, which contain multi-parallel evaluation data to assess the zero-shot performance. In all experiments, we use BLEU as the automatic metric for translation evaluation."
+          ],
+          "em": 0.0,
+          "f1": 0.12121212121212122,
+          "evidence_f1": 0.33548387096774196
+        },
+        {
+          "question": "what language pairs are explored?",
+          "query_type": "WHAT",
+          "doc_id": "1912.01214",
+          "ground_truth": "De-En, En-Fr, Fr-En, En-Es, Ro-En, En-De, Ar-En, En-Ru",
+          "predicted": "回答（参照情報に基づく）:\n\n主張（明示されている言及）\n- 文中で明示されている言語対の例は「Arabic → Spanish（アラビア語→スペイン語）」だけです（「Translation between these low-resource languages (e. g. , Arabic→Spanish) …」）。【主張】\n\n証拠（参照箇所）\n- 低リソース言語間の翻訳は英語のような豊富資源言語をピボットにして行われると述べられており、ピボット言語として英語が想定されていることが示されています（定義：「where English acts as the pivot language…」）。【定義】【主張】\n- また「source–pivot sentence pairs in the Europarl validation sets」とあるため、実験では「source（出発言語）–pivot（英語）」の対が扱われていることが示唆されます（ただし具体的な言語一覧は示されていません）。【根拠】\n\n仮定（暗黙の前提）\n- 多くの記述は「source」と「pivot（英語）」の組み合わせを前提にしており、具体的なすべての言語ペアは本文中に列挙されていないため、他の言語対が使われている可能性はあるが参照情報からは特定できません。【根拠】【定義】\n\n結論（回答）\n- 参照情報から確実に読み取れる具体的な言語対は「Arabic→Spanish」のみです。その他は一般的に「source–pivot（英語）」の組み合わせが扱われているとしか言えず、具体的な言語ペアの一覧は与えられていません。",
+          "retrieved_contexts": [
+            "where English acts as the pivot language, its left side is the source language, and its right side is the target language.",
+            "Multilingual NMT (MNMT) enables training a single model that supports translation from multiple source languages into multiple target languages, even those unseen language pairs",
+            "Two existing cross-lingual pre-training methods, Masked Language Modeling (MLM) and Translation Language Modeling (TLM),",
+            "Then we calculate the cosine similarity for each sentence pair and average all cosine scores.",
+            "we adopt max-pooling operation to collect the sentence representation of each encoder layer",
+            "we first pretrain MLM on monolingual corpora of both source and pivot languages,",
+            "and continue to pretrain TLM or the proposed BRLM on the available parallel data between source and pivot languages,",
+            "Before training a parent model, our approach fully leverages cross-lingual pre-training methods",
+            "BIBREF17, BIBREF18, BIBREF19, BIBREF20, BIBREF21.",
+            "Aside from simpler deployment,",
+            "for all source-pivot sentence pairs in the Europarl validation sets.",
+            "Following BIBREF23,",
+            "we can observe that, MLM+BRLM-SA has the most stable and similar cross-lingual representations of sentence pairs on all layers,",
+            "Translation between these low-resource languages (e. g. , Arabic$\\rightarrow $Spanish) is usually accomplished with pivoting through a rich-resource language (such as English), i. e.",
+            "to further obtain word-level representation alignment between different languages."
+          ],
+          "gold_evidence": [
+            "For MultiUN corpus, we use four languages: English (En) is set as the pivot language, which has parallel data with other three languages which do not have parallel data between each other. The three languages are Arabic (Ar), Spanish (Es), and Russian (Ru), and mutual translation between themselves constitutes six zero-shot translation direction for evaluation. We use 80K BPE splits as the vocabulary. Note that all sentences are tokenized by the tokenize.perl script, and we lowercase all data to avoid a large vocabulary for the MultiUN corpus.",
+            "The statistics of Europarl and MultiUN corpora are summarized in Table TABREF18. For Europarl corpus, we evaluate on French-English-Spanish (Fr-En-Es), German-English-French (De-En-Fr) and Romanian-English-German (Ro-En-De), where English acts as the pivot language, its left side is the source language, and its right side is the target language. We remove the multi-parallel sentences between different training corpora to ensure zero-shot settings. We use the devtest2006 as the validation set and the test2006 as the test set for Fr$\\rightarrow $Es and De$\\rightarrow $Fr. For distant language pair Ro$\\rightarrow $De, we extract 1,000 overlapping sentences from newstest2016 as the test set and the 2,000 overlapping sentences split from the training set as the validation set since there is no official validation and test sets. For vocabulary, we use 60K sub-word tokens based on Byte Pair Encoding (BPE) BIBREF33.",
+            "FLOAT SELECTED: Table 1: Data Statistics."
+          ],
+          "em": 0.0,
+          "f1": 0.0,
+          "evidence_f1": 0.3703703703703704
+        },
+        {
+          "question": "what ner models were evaluated?",
+          "query_type": "WHAT",
+          "doc_id": "1810.08699",
+          "ground_truth": "Stanford NER ... spaCy 2.0 ... recurrent model with a CRF top layer",
+          "predicted": "結論: 提供された参照情報だけでは、評価された NER モデルの完全な一覧は特定できません。\n\n主張（参照情報に明示されているもの）\n- Stanford NER が条件付き確率場（CRF）分類器であると定義されている（【定義】 Stanford NER is conditional random fields (CRF) classifier）。  \n  → したがって Stanford NER（CRF）を評価対象としている可能性がある。\n\n- 「訓練した再帰型モデル（recurrent models）」が存在し、その混同行列が示されている（「The confusion matrix for one of the trained recurrent models illustrates that difference (Table TABREF22 ).」）。  \n  → 再帰型（リカレント）モデルの少なくとも1つが訓練・評価されていることが示唆される。\n\n根拠（該当箇所）\n- Stanford NER = CRF（【定義】）。  \n- 再帰型モデルの混同行列の記述（【根拠】 The confusion matrix ... trained recurrent models ... Table TABREF22）。  \n- 「models trained on generated data」を評価するためにアノテーション済みデータセットを用意した記述（【根拠】 In order to evaluate the models trained on generated data, we manually annotated a named entities dataset ...）。  \n  → しかしこの記述は「いくつかのモデルを評価した」ことを示すにとどまり、モデル名までは示していない。\n\n仮定（参照情報からは明示されていないが推測され得る点）\n- Stanford NER（CRF）や何らかの再帰型ニューラルモデルが評価対象に含まれる可能性が高い、という推測（ただし明確な列挙はない）。\n\n要約\n- 明確に示されているのは「Stanford NER（CRF）」と「再帰型モデル」が関係しているという点のみ。参照情報には評価された NER モデルの完全な一覧や他のモデル名は記載されていないため、どのモデルが評価されたかを完全には特定できません（参照: 【定義】 Stanford NER is conditional random fields (CRF) classifier; 【根拠】 The confusion matrix for one of the trained recurrent models ...; 【根拠】 In order to evaluate the models trained on generated data ...）。",
+          "retrieved_contexts": [
+            "Stanford NER is conditional random fields (CRF) classifier",
+            "Title: pioNER: Datasets and Baselines for Armenian Named Entity Recognition",
+            "based on lexical and contextual features",
+            "the current word",
+            "character-level n-grams of up to length 6 at its beginning and the end",
+            "previous and next words",
+            "word shape and sequence features BIBREF16 .",
+            "The confusion matrix for one of the trained recurrent models illustrates that difference (Table TABREF22 ).",
+            "In order to evaluate the models trained on generated data, we manually annotated a named entities dataset comprising 53453 tokens and 2566 sentences selected from over 250 news texts from ilur. am.",
+            "we release 50-, 100-, 200- and 300-dimensional word vectors for Armenian",
+            "with a vocabulary size of 400000.",
+            "Before training, all the words in the dataset were lowercased.",
+            "For the final models we used the following training hyperparameters:",
+            "15 window size and 20 training epochs.",
+            "Based on its success for a wide range of languages,"
+          ],
+          "gold_evidence": [
+            "In this section we describe a number of experiments targeted to compare the performance of popular named entity recognition algorithms on our data. We trained and evaluated Stanford NER, spaCy 2.0, and a recurrent model similar to BIBREF13 , BIBREF14 that uses bidirectional LSTM cells for character-based feature extraction and CRF, described in Guillaume Genthial's Sequence Tagging with Tensorflow blog post BIBREF15 .",
+            "Stanford NER is conditional random fields (CRF) classifier based on lexical and contextual features such as the current word, character-level n-grams of up to length 6 at its beginning and the end, previous and next words, word shape and sequence features BIBREF16 .",
+            "spaCy 2.0 uses a CNN-based transition system for named entity recognition. For each token, a Bloom embedding is calculated based on its lowercase form, prefix, suffix and shape, then using residual CNNs, a contextual representation of that token is extracted that potentially draws information from up to 4 tokens from each side BIBREF17 . Each update of the transition system's configuration is a classification task that uses the contextual representation of the top token on the stack, preceding and succeeding tokens, first two tokens of the buffer, and their leftmost, second leftmost, rightmost, second rightmost children. The valid transition with the highest score is applied to the system. This approach reportedly performs within 1% of the current state-of-the-art for English . In our experiments, we tried out 50-, 100-, 200- and 300-dimensional pre-trained GloVe embeddings. Due to time constraints, we did not tune the rest of hyperparameters and used their default values.",
+            "The main model that we focused on was the recurrent model with a CRF top layer, and the above-mentioned methods served mostly as baselines. The distinctive feature of this approach is the way contextual word embeddings are formed. For each token separately, to capture its word shape features, character-based representation is extracted using a bidirectional LSTM BIBREF18 . This representation gets concatenated with a distributional word vector such as GloVe, forming an intermediate word embedding. Using another bidirectional LSTM cell on these intermediate word embeddings, the contextual representation of tokens is obtained (Figure FIGREF17 ). Finally, a CRF layer labels the sequence of these contextual representations. In our experiments, we used Guillaume Genthial's implementation of the algorithm. We set the size of character-based biLSTM to 100 and the size of second biLSTM network to 300."
+          ],
+          "em": 0.0,
+          "f1": 0.06289308176100629,
+          "evidence_f1": 0.3538175046554935
+        },
+        {
+          "question": "what is the source of the news sentences?",
+          "query_type": "WHAT",
+          "doc_id": "1810.08699",
+          "ground_truth": "ilur.am",
+          "predicted": "回答（提供資料に基づく）:\n\n- 主張: 評価用に手動アノテーションした文は「ilur.am」からのニュース文であるとされている。[主張]「In order to evaluate the models trained on generated data, we manually annotated a named entities dataset comprising 53453 tokens and 2566 sentences selected from over 250 news texts from ilur. am.」\n\n- 根拠: 同じ文が根拠としても提示されている。[根拠]「we manually annotated a named entities dataset comprising 53453 tokens and 2566 sentences selected from over 250 news texts from ilur. am.」\n\nしたがって、ニュース文の出典は ilur.am（約250本以上のニュース記事）です。",
+          "retrieved_contexts": [
+            "Title: pioNER: Datasets and Baselines for Armenian Named Entity Recognition",
+            "In this approach, the annotations of high-resource language are projected over the corresponding tokens of the parallel low-resource language's texts.",
+            "Since in Wikipedia articles only the first mention of each entity is linked,",
+            "This is accomplished by compiling a list of common aliases for articles corresponding to named entities,",
+            "and then finding text fragments matching those aliases to assign a named entity label.",
+            "An article's aliases include its title, titles of disambiguation pages with the article, and texts of links leading to the article (e. g.",
+            "In order to evaluate the models trained on generated data, we manually annotated a named entities dataset comprising 53453 tokens and 2566 sentences selected from over 250 news texts from ilur. am.",
+            "however this was not always the case in actual source data",
+            "the strict selection of candidate sentences",
+            "the relatively small size of Armenian Wikipedia.",
+            "using resource-rich language's corpora to generate annotated data for the low-resource language.",
+            "this approach becomes very restrictive and in order to include more sentences, additional links are inferred.",
+            "this approach becomes very restrictive and in order to include more sentences, additional links are inferred.",
+            "In order to evaluate the models trained on generated data, we manually annotated a named entities dataset comprising 53453 tokens and 2566 sentences selected from over 250 news texts from ilur. am.",
+            "Another kind of common annotation errors occurred when a named entity appeared inside a link not targeting a LOC, ORG, or PER article (e. g."
+          ],
+          "gold_evidence": [
+            "In order to evaluate the models trained on generated data, we manually annotated a named entities dataset comprising 53453 tokens and 2566 sentences selected from over 250 news texts from ilur.am. This dataset is comparable in size with the test sets of other languages (Table TABREF10 ). Included sentences are from political, sports, local and world news (Figures FIGREF8 , FIGREF9 ), covering the period between August 2012 and July 2018. The dataset provides annotations for 3 popular named entity classes: people (PER), organizations (ORG), and locations (LOC), and is released in CoNLL03 format with IOB tagging scheme. Tokens and sentences were segmented according to the UD standards for the Armenian language BIBREF11 .",
+            "We used Sysoev and Andrianov's modification of the Nothman et al. approach to automatically generate data for training a named entity recognizer. This approach uses links between Wikipedia articles to generate sequences of named-entity annotated tokens."
+          ],
+          "em": 0.0,
+          "f1": 0.02857142857142857,
+          "evidence_f1": 0.44110275689223055
+        },
+        {
+          "question": "what are the topics pulled from Reddit?",
+          "query_type": "WHAT",
+          "doc_id": "1609.00425",
+          "ground_truth": "politics, business, science, and AskReddit, and 1000 additional posts from the Reddit frontpage.",
+          "predicted": "回答は文脈に基づきます。\n\n主張（what was pulled / サンプリングされたトピック）\n- 投稿はサブレディット単位で集められており、具体的には politics, business, science, AskReddit の各サブレディットからそれぞれランダムに1000件ずつ、さらに Reddit フロントページから追加で1000件をサンプリングしたとあります（【根拠】, 【主張】）。\n\n補足（関連する記述・例）\n- 定義ではサブレディットは technology や politics のような特定の興味・話題に向けた下位コミュニティであると説明されています（【定義】）。\n- また、研究上の問いとして「どんな種類のトピック（例: guns, LGBT）が最もドグマティズムを引き付けるか？」という関心が示されています（R1:【主張】）。これは例示的なトピックであり、上のサンプリング一覧に含まれる具体的カテゴリの一部として挙げられています（【根拠】の例）。\n\n要約：文脈で明示されている「Pull（サンプリングされた）トピック」は politics, business, science, AskReddit と Reddit frontpage です（【根拠】, 【主張】）。それ以外の具体的トピック名（guns, LGBT 等）は研究で検討されうる例として挙げられていますが、上記サンプルにそれら個別トピックが直接含まれるとは明言されていません（R1:【主張】）。",
+          "retrieved_contexts": [
+            "Subreddits are sub-communities on Reddit oriented around specific interests or topics, such as technology or politics.",
+            "(3) focus: the proportion of a user's posts that appear in the subreddit where they are most active",
+            "To collect a diverse training dataset, we have randomly sampled 1000 posts each from the subreddits politics, business, science, and AskReddit, and 1000 additional posts from the Reddit frontpage.",
+            "All posts in our sample appeared between January 2007 and March 2015, and to control for length effects, contain between 300 and 400 characters.",
+            "All posts in our sample appeared between January 2007 and March 2015, and to control for length effects, contain between 300 and 400 characters.",
+            "For example, 45 users have politics and technology among their dogmatic subreddits, so we consider politics and technology as linked 45 times.",
+            "Ertel sought to capture dogmatism linguistically,",
+            "(DebateAChristian or ukpolitics)",
+            "spending less time framing a problem",
+            "expressing more certainty in their solution",
+            "To collect a diverse training dataset, we have randomly sampled 1000 posts each from the subreddits politics, business, science, and AskReddit, and 1000 additional posts from the Reddit frontpage.",
+            "Sampling from Reddit as a whole would bias the model towards the most commonly discussed content.",
+            "A natural starting point for analyzing dogmatism on Reddit is to examine how it characterizes the site's sub-communities.",
+            "To find out, we examine the relationships between subreddits over which individual users are dogmatic.",
+            "R1: What kinds of topics (e. g. , guns, LGBT) attract the highest levels of dogmatism?"
+          ],
+          "gold_evidence": [
+            "Data collection. Subreddits are sub-communities on Reddit oriented around specific interests or topics, such as technology or politics. Sampling from Reddit as a whole would bias the model towards the most commonly discussed content. But by sampling posts from individual subreddits, we can control the kinds of posts we use to train our model. To collect a diverse training dataset, we have randomly sampled 1000 posts each from the subreddits politics, business, science, and AskReddit, and 1000 additional posts from the Reddit frontpage. All posts in our sample appeared between January 2007 and March 2015, and to control for length effects, contain between 300 and 400 characters. This results in a total training dataset of 5000 posts.",
+            "We now apply our dogmatism classifier to a larger dataset of posts, examining how dogmatic language shapes the Reddit community. Concretely, we apply the BOW+LING model trained on the full Reddit dataset to millions of new unannotated posts, labeling these posts with a probability of dogmatism according to the classifier (0=non-dogmatic, 1=dogmatic). We then use these dogmatism annotations to address four research questions."
+          ],
+          "em": 0.0,
+          "f1": 0.15789473684210528,
+          "evidence_f1": 0.585480093676815
+        },
+        {
+          "question": "What predictive model do they build?",
+          "query_type": "WHAT",
+          "doc_id": "1609.00425",
+          "ground_truth": "logistic regression models",
+          "predicted": "要約（主張・根拠・不確定点）:\n\n- 主張（What they build）: 彼らは「Reddit の投稿／ユーザー行動から dogmatism（独断性）を予測する予測モデル」を構築していると主張されている。参照: 「Activity and focus are positively associated with dogmatism...」「For example, posts that use less confident language tend to be less dogmatic.」および定義としての \"Prediction task.\"（参照情報）。\n\n- 根拠（モデルのデータ・評価・特徴）:\n  - モデルは Reddit 投稿コーパスに基づく（「Our model is based on a corpus of Reddit posts, collected across a diverse set of conversational topics and annotated via paid crowdsourcing.」）。\n  - ユーザ行動のメトリクスを用いており、データは「1000 users and 10 million posts described in Section 5.2」を使用している（「To find out, we compute metrics of user behavior using the data sample of 1000 users and 10 million posts described in Section 5.2.」）。\n  - 予測は特徴集合（feature sets）ごとの予測力を検証している（「examining the predictive power of feature sets that guide the model's predictions.」）。\n  - 性能評価はクロスバリデーションで行っている（「First, we test the performance of our model under cross-validation within the Reddit comment dataset.」）。\n  - 結果として複数の特徴が統計的に有意であると報告されている（例: 「with all features reaching statistical significance (p<0.001).」や「(R^2=0.1, p<0.001)」）。\n\n- 不確定点（参照情報からは分からないこと）:\n  - 参照情報には、使用した具体的な機械学習アルゴリズム（例：ロジスティック回帰、SVM、ランダムフォレスト、ニューラルネット等）やモデルの詳細な構造は記載されていない。したがって「どのアルゴリズムを使ったか」はこの情報からは判断できない。\n\n結論（簡潔）:\n彼らは、クラウドソーシングで注釈された Reddit 投稿コーパスとユーザ行動メトリクス（1000ユーザ・1000万投稿）を用い、複数の特徴集合に基づいて投稿／ユーザの dogmatism を予測するモデルを構築・評価している（クロスバリデーションで検証）。ただし、参照情報からはモデルの具体的な学習手法（アルゴリズム）は特定できない。",
+          "retrieved_contexts": [
+            "Prediction task.",
+            "First, we test the performance of our model under cross-validation within the Reddit comment dataset.",
+            "To find out, we compute metrics of user behavior",
+            "using the data sample of 1000 users and 10 million posts described in Section 5. 2.",
+            "The people that produced Windows ME, Vista and 8?",
+            "examining the predictive power of feature sets that guide the model's predictions.",
+            "Our model is based on a corpus of Reddit posts,",
+            "collected across a diverse set of conversational topics",
+            "and annotated via paid crowdsourcing.",
+            "( $R^2=0. 1$ , $p<0. 001$ )",
+            "with all features reaching statistical significance ( $p<0. 001$ ).",
+            "Activity and focus are positively associated with dogmatism, while breadth and engagement are negatively associated (Table 5 ).",
+            "breadth and engagement are negatively associated (Table 5 ).",
+            "(Table 5 ).",
+            "For example, posts that use less confident language tend to be less dogmatic."
+          ],
+          "gold_evidence": [
+            "We compare the predictions of logistic regression models based on unigram bag-of-words features (BOW), sentiment signals (SENT), the linguistic features from our earlier analyses (LING), and combinations of these features. BOW and SENT provide baselines for the task. We compute BOW features using term frequency-inverse document frequency (TF-IDF) and category-based features by normalizing counts for each category by the number of words in each document. The BOW classifiers are trained with regularization (L2 penalties of 1.5)."
+          ],
+          "em": 0.0,
+          "f1": 0.0111731843575419,
+          "evidence_f1": 0.25233644859813087
+        }
+      ]
+    },
+    "BM25RAG": {
+      "em": 0.0,
+      "f1": 0.12795138888888888,
+      "faithfulness": 0.5625,
+      "hallucination_rate": 0.0,
+      "citation_accuracy": null,
+      "answer_correctness": 0.5,
+      "answer_consistency": null,
+      "evidence_f1": 0.3848585469934935,
+      "num_samples": 8,
+      "per_query_type": {
+        "WHAT": {
+          "em": 0.0,
+          "f1": 0.12795138888888888,
+          "count": 8,
+          "evidence_f1": 0.3848585469934935
+        }
+      },
+      "raw_scores": [],
+      "per_sample": [
+        {
+          "question": "which multilingual approaches do they compare with?",
+          "query_type": "WHAT",
+          "doc_id": "1912.01214",
+          "ground_truth": "BIBREF19 ... BIBREF20",
+          "predicted": "They compare with: \n- Pivoting (translate source→pivot→target), \n- Multilingual NMT (MNMT) from BIBREF19, \n- Cross-lingual transfer without pretraining (BIBREF16).",
+          "retrieved_contexts": [
+            "Table TABREF19 and TABREF26 report zero-shot results on Europarl and Multi-UN evaluation sets, respectively. We compare our approaches with related approaches of pivoting, multilingual NMT (MNMT) BIBREF19, and cross-lingual transfer without pretraining BIBREF16.",
+            "The results show that our approaches consistently outperform other approaches across languages and datasets, especially surpass pivoting, which is a strong baseline in the zero-shot scenario that multilingual NMT systems often fail to beat BIBREF19, BIBREF20, BIBREF23. Pivoting translates source to pivot then to target in two steps, causing inefficient translation process. Our approaches use one encoder-decoder model to translate between any zero-shot directions, which is more efficient than pivoting.",
+            "In this paper, we propose a cross-lingual pretraining based transfer approach for the challenging zero-shot translation task, in which source and target languages have no parallel data, while they both have parallel data with a high resource pivot language.",
+            "For vocabulary, we use 60K sub-word tokens based on Byte Pair Encoding (BPE) BIBREF33. For MultiUN corpus, we use four languages: English (En) is set as the pivot language, which has parallel data with other three languages which do not have parallel data between each other. The three languages are Arabic (Ar), Spanish (Es), and Russian (Ru), and mutual translation between themselves constitutes six zero-shot translation direction for evaluation. We use 80K BPE splits as the vocabulary.",
+            "We propose a novel pre-training method called BRLM, which can effectively alleviates the distance between different source language spaces. Our proposed approach significantly improves zero-shot translation performance, consistently surpassing pivoting and multilingual approaches. Meanwhile, the performance on supervised translation direction remains the same level or even better when using our method. In recent years, zero-shot translation in NMT has attracted widespread attention in academic research."
+          ],
+          "gold_evidence": [
+            "Table TABREF19 and TABREF26 report zero-shot results on Europarl and Multi-UN evaluation sets, respectively. We compare our approaches with related approaches of pivoting, multilingual NMT (MNMT) BIBREF19, and cross-lingual transfer without pretraining BIBREF16. The results show that our approaches consistently outperform other approaches across languages and datasets, especially surpass pivoting, which is a strong baseline in the zero-shot scenario that multilingual NMT systems often fail to beat BIBREF19, BIBREF20, BIBREF23. Pivoting translates source to pivot then to target in two steps, causing inefficient translation process. Our approaches use one encoder-decoder model to translate between any zero-shot directions, which is more efficient than pivoting. Regarding the comparison between transfer approaches, our cross-lingual pretraining based transfer outperforms transfer method that does not use pretraining by a large margin."
+          ],
+          "em": 0.0,
+          "f1": 0.1111111111111111,
+          "evidence_f1": 0.5658536585365853
+        },
+        {
+          "question": "what are the pivot-based baselines?",
+          "query_type": "WHAT",
+          "doc_id": "1912.01214",
+          "ground_truth": "pivoting ... pivoting$_{\\rm m}$",
+          "predicted": "They are the two pivot-based strategies: (1) pivoting (two-step translate via a pivot language) and (2) pivot-synthetic (create synthetic source–target data via the pivot and train directly).",
+          "retrieved_contexts": [
+            "Regarding the comparison between transfer approaches, our cross-lingual pretraining based transfer outperforms transfer method that does not use pretraining by a large margin. Regarding comparison between the baselines in table TABREF19, we find that pivoting is the strongest baseline that has significant advantage over other two baselines.",
+            "Note that all sentences are tokenized by the tokenize. perl script, and we lowercase all data to avoid a large vocabulary for the MultiUN corpus. We use traditional transfer learning, pivot-based method and multilingual NMT as our baselines. For the fair comparison, the Transformer-big model with 1024 embedding/hidden units, 4096 feed-forward filter size, 6 layers and 8 heads per layer is adopted for all translation models in our experiments.",
+            "For the more complicated scenario that either the source side or the target side has multiple languages, the encoder and the decoder are also shared across each side languages for efficient deployment of translation between multiple languages. We evaluate our cross-lingual pre-training based transfer approach against several strong baselines on two public datatsets, Europarl BIBREF31 and MultiUN BIBREF32, which contain multi-parallel evaluation data to assess the zero-shot performance.",
+            "Cross-lingual transfer for languages without shared vocabularies BIBREF16 manifests the worst performance because of not using source$\\leftrightarrow $pivot parallel data, which is utilized as beneficial supervised signal for the other two baselines. Our best approach of MLM+BRLM-SA achieves the significant superior performance to all baselines in the zero-shot directions, improving by 0. 9-4. 8 BLEU points over the strong pivoting.",
+            "Existing methods are mainly divided into four categories: pivot-based method, transfer learning, multilingual NMT, and unsupervised NMT. Pivot-based Method is a common strategy to obtain a source$\\rightarrow $target model by introducing a pivot language. This approach is further divided into pivoting and pivot-synthetic."
+          ],
+          "gold_evidence": [
+            "Table TABREF19 and TABREF26 report zero-shot results on Europarl and Multi-UN evaluation sets, respectively. We compare our approaches with related approaches of pivoting, multilingual NMT (MNMT) BIBREF19, and cross-lingual transfer without pretraining BIBREF16. The results show that our approaches consistently outperform other approaches across languages and datasets, especially surpass pivoting, which is a strong baseline in the zero-shot scenario that multilingual NMT systems often fail to beat BIBREF19, BIBREF20, BIBREF23. Pivoting translates source to pivot then to target in two steps, causing inefficient translation process. Our approaches use one encoder-decoder model to translate between any zero-shot directions, which is more efficient than pivoting. Regarding the comparison between transfer approaches, our cross-lingual pretraining based transfer outperforms transfer method that does not use pretraining by a large margin.",
+            "Although it is challenging for one model to translate all zero-shot directions between multiple distant language pairs of MultiUN, MLM+BRLM-SA still achieves better performances on Es $\\rightarrow $ Ar and Es $\\rightarrow $ Ru than strong pivoting$_{\\rm m}$, which uses MNMT to translate source to pivot then to target in two separate steps with each step receiving supervised signal of parallel corpora. Our approaches surpass pivoting$_{\\rm m}$ in all zero-shot directions by adding back translation BIBREF33 to generate pseudo parallel sentences for all zero-shot directions based on our pretrained models such as MLM+BRLM-SA, and further training our universal encoder-decoder model with these pseudo data. BIBREF22 gu2019improved introduces back translation into MNMT, while we adopt it in our transfer approaches. Finally, our best MLM+BRLM-SA with back translation outperforms pivoting$_{\\rm m}$ by 2.4 BLEU points averagely, and outperforms MNMT BIBREF22 by 4.6 BLEU points averagely. Again, in supervised translation directions, MLM+BRLM-SA with back translation also achieves better performance than the original supervised Transformer.",
+            "We use traditional transfer learning, pivot-based method and multilingual NMT as our baselines. For the fair comparison, the Transformer-big model with 1024 embedding/hidden units, 4096 feed-forward filter size, 6 layers and 8 heads per layer is adopted for all translation models in our experiments. We set the batch size to 2400 per batch and limit sentence length to 100 BPE tokens. We set the $\\text{attn}\\_\\text{drop}=0$ (a dropout rate on each attention head), which is favorable to the zero-shot translation and has no effect on supervised translation directions BIBREF22. For the model initialization, we use Facebook's cross-lingual pretrained models released by XLM to initialize the encoder part, and the rest parameters are initialized with xavier uniform. We employ the Adam optimizer with $\\text{lr}=0.0001$, $t_{\\text{warm}\\_\\text{up}}=4000$ and $\\text{dropout}=0.1$. At decoding time, we generate greedily with length penalty $\\alpha =1.0$.",
+            "Pivot-based Method is a common strategy to obtain a source$\\rightarrow $target model by introducing a pivot language. This approach is further divided into pivoting and pivot-synthetic. While the former firstly translates a source language into the pivot language which is later translated to the target language BIBREF4, BIBREF5, BIBREF12, the latter trains a source$\\rightarrow $target model with pseudo data generated from source-pivot or pivot-target parallel data BIBREF13, BIBREF14. Although the pivot-based methods can achieve not bad performance, it always falls into a computation-expensive and parameter-vast dilemma of quadratic growth in the number of source languages, and suffers from the error propagation problem BIBREF15."
+          ],
+          "em": 0.0,
+          "f1": 0.06666666666666667,
+          "evidence_f1": 0.5104808877928484
+        },
+        {
+          "question": "which datasets did they experiment with?",
+          "query_type": "WHAT",
+          "doc_id": "1912.01214",
+          "ground_truth": "Europarl ... MultiUN",
+          "predicted": "The provided context only states they ran experiments on \"two public datasets\" but does not name them. The specific dataset names aren’t included—please share the paper's Experiments/Setup Datasets section or a link so I can list the exact datasets.",
+          "retrieved_contexts": [
+            "In this paper, we propose a cross-lingual pretraining based transfer approach for the challenging zero-shot translation task, in which source and target languages have no parallel data, while they both have parallel data with a high resource pivot language.",
+            "Experiments on two public datasets show that our approach significantly outperforms strong pivot-based baseline and various multilingual NMT approaches. Section: Introduction\n\nSection: Related Work\n\nSection: Approach\n\nSection: Approach ::: Masked and Translation Language Model Pretraining\n\nSection: Approach ::: Bridge Language Model Pretraining\n\nSection: Approach ::: Transfer Protocol\n\nSection: Experiments ::: Setup\n\nSection: Experiments ::: Setup ::: Datasets.",
+            "The results show that our approaches consistently outperform other approaches across languages and datasets, especially surpass pivoting, which is a strong baseline in the zero-shot scenario that multilingual NMT systems often fail to beat BIBREF19, BIBREF20, BIBREF23. Pivoting translates source to pivot then to target in two steps, causing inefficient translation process. Our approaches use one encoder-decoder model to translate between any zero-shot directions, which is more efficient than pivoting.",
+            "On this basis, BIBREF7 and BIBREF8 use shared vocabularies for source/target language to improve transfer learning, while BIBREF16 relieve the vocabulary mismatch by mainly using cross-lingual word embedding. Although these methods are successful in the low-resource scene, they have limited effects in zero-shot translation.",
+            "Experiments on public datasets show that our approaches significantly outperforms several strong baseline systems, and manifest the language invariance characteristics in both sentence level and word level neural representations. We would like to thank the anonymous reviewers for the helpful comments. This work was supported by National Key R&D Program of China (Grant No. 2016YFE0132100), National Natural Science Foundation of China (Grant No. 61525205, 61673289)."
+          ],
+          "gold_evidence": [
+            "We evaluate our cross-lingual pre-training based transfer approach against several strong baselines on two public datatsets, Europarl BIBREF31 and MultiUN BIBREF32, which contain multi-parallel evaluation data to assess the zero-shot performance. In all experiments, we use BLEU as the automatic metric for translation evaluation."
+          ],
+          "em": 0.0,
+          "f1": 0.0,
+          "evidence_f1": 0.1597444089456869
+        },
+        {
+          "question": "what language pairs are explored?",
+          "query_type": "WHAT",
+          "doc_id": "1912.01214",
+          "ground_truth": "De-En, En-Fr, Fr-En, En-Es, Ro-En, En-De, Ar-En, En-Ru",
+          "predicted": "The context mentions:\n- Spanish → Arabic (Es → Ar)\n- Spanish → Russian (Es → Ru)\n\nIt also gives Arabic → Spanish as an example of a low-resource pivoting scenario.",
+          "retrieved_contexts": [
+            "The key difficulty of this method is to ensure the intermediate representations of the universal encoder are language invariant. In the rest of this section, we first present two existing methods yet to be explored in zero-shot translation, and then propose a straightforward but effective cross-lingual pre-training method. In the end, we present the whole training and inference protocol for transfer.",
+            "Multilingual NMT (MNMT) enables training a single model that supports translation from multiple source languages into multiple target languages, even those unseen language pairs BIBREF17, BIBREF18, BIBREF19, BIBREF20, BIBREF21. Aside from simpler deployment, MNMT benefits from transfer learning where low-resource language pairs are trained together with high-resource ones. However, BIBREF22 point out that MNMT for zero-shot translation easily fails, and is sensitive to the hyper-parameter setting.",
+            "Title: Cross-lingual Pre-training Based Transfer for Zero-shot Neural Machine Translation\nAbstract: Transfer learning between different language pairs has shown its effectiveness for Neural Machine Translation (NMT) in low-resource scenario.",
+            "Section: Conclusion\n\nSection: Acknowledgments\nAlthough Neural Machine Translation (NMT) has dominated recent research on translation tasks BIBREF0, BIBREF1, BIBREF2, NMT heavily relies on large-scale parallel data, resulting in poor performance on low-resource or zero-resource language pairs BIBREF3. Translation between these low-resource languages (e. g. , Arabic$\\rightarrow $Spanish) is usually accomplished with pivoting through a rich-resource language (such as English), i. e.",
+            "Although it is challenging for one model to translate all zero-shot directions between multiple distant language pairs of MultiUN, MLM+BRLM-SA still achieves better performances on Es $\\rightarrow $ Ar and Es $\\rightarrow $ Ru than strong pivoting$_{\\rm m}$, which uses MNMT to translate source to pivot then to target in two separate steps with each step receiving supervised signal of parallel corpora."
+          ],
+          "gold_evidence": [
+            "For MultiUN corpus, we use four languages: English (En) is set as the pivot language, which has parallel data with other three languages which do not have parallel data between each other. The three languages are Arabic (Ar), Spanish (Es), and Russian (Ru), and mutual translation between themselves constitutes six zero-shot translation direction for evaluation. We use 80K BPE splits as the vocabulary. Note that all sentences are tokenized by the tokenize.perl script, and we lowercase all data to avoid a large vocabulary for the MultiUN corpus.",
+            "The statistics of Europarl and MultiUN corpora are summarized in Table TABREF18. For Europarl corpus, we evaluate on French-English-Spanish (Fr-En-Es), German-English-French (De-En-Fr) and Romanian-English-German (Ro-En-De), where English acts as the pivot language, its left side is the source language, and its right side is the target language. We remove the multi-parallel sentences between different training corpora to ensure zero-shot settings. We use the devtest2006 as the validation set and the test2006 as the test set for Fr$\\rightarrow $Es and De$\\rightarrow $Fr. For distant language pair Ro$\\rightarrow $De, we extract 1,000 overlapping sentences from newstest2016 as the test set and the 2,000 overlapping sentences split from the training set as the validation set since there is no official validation and test sets. For vocabulary, we use 60K sub-word tokens based on Byte Pair Encoding (BPE) BIBREF33.",
+            "FLOAT SELECTED: Table 1: Data Statistics."
+          ],
+          "em": 0.0,
+          "f1": 0.0,
+          "evidence_f1": 0.3055555555555556
+        },
+        {
+          "question": "what ner models were evaluated?",
+          "query_type": "WHAT",
+          "doc_id": "1810.08699",
+          "ground_truth": "Stanford NER ... spaCy 2.0 ... recurrent model with a CRF top layer",
+          "predicted": "They evaluated three NER models: Stanford NER (feature-based), spaCy 2.0, and a recurrent BiLSTM+CRF model (with character-based feature extraction).",
+          "retrieved_contexts": [
+            "We trained and evaluated Stanford NER, spaCy 2. 0, and a recurrent model similar to BIBREF13 , BIBREF14 that uses bidirectional LSTM cells for character-based feature extraction and CRF, described in Guillaume Genthial's Sequence Tagging with Tensorflow blog post BIBREF15 .",
+            "The models with the best F1 score on the development set were tested on the manually annotated gold dataset. Table TABREF19 shows the average scores of evaluated models. The highest F1 score was achieved by the recurrent model using a batch size of 8 and Adam optimizer with an initial learning rate of 0. 001. Updating word embeddings during training also noticeably improved the performance.",
+            "We release two named-entity annotated datasets for the Armenian language: a silver-standard corpus for training NER models, and a gold-standard corpus for testing. It is worth to underline the importance of the latter corpus, as we aim it to serve as a benchmark for future named entity recognition systems designed for the Armenian language. Along with the corpora, we publish GloVe word vector models trained on a collection of Armenian texts.",
+            "GloVe word vector models of four different sizes (50, 100, 200, and 300) were tested, with vectors of size 50 producing the best results (Table TABREF20 ). For spaCy 2. 0 named entity recognizer, the same word embedding models were tested. However, in this case the performance of 200-dimensional embeddings was highest (Table TABREF21 ). Unsurprisingly, both deep learning models outperformed the feature-based Stanford recognizer in recall, the latter however demonstrated noticeably higher precision.",
+            "Furthermore, popular entity recognition models were applied to the mentioned data in order to obtain baseline results for future research in the area. Along with the datasets, we developed GloVe BIBREF10 word embeddings to train and evaluate the deep learning models in our experiments. The contributions of this work are (i) the silver-standard training corpus, (ii) the gold-standard test corpus, (iii) GloVe word embeddings, (iv) baseline results for 3 different models on the proposed benchmark data set."
+          ],
+          "gold_evidence": [
+            "In this section we describe a number of experiments targeted to compare the performance of popular named entity recognition algorithms on our data. We trained and evaluated Stanford NER, spaCy 2.0, and a recurrent model similar to BIBREF13 , BIBREF14 that uses bidirectional LSTM cells for character-based feature extraction and CRF, described in Guillaume Genthial's Sequence Tagging with Tensorflow blog post BIBREF15 .",
+            "Stanford NER is conditional random fields (CRF) classifier based on lexical and contextual features such as the current word, character-level n-grams of up to length 6 at its beginning and the end, previous and next words, word shape and sequence features BIBREF16 .",
+            "spaCy 2.0 uses a CNN-based transition system for named entity recognition. For each token, a Bloom embedding is calculated based on its lowercase form, prefix, suffix and shape, then using residual CNNs, a contextual representation of that token is extracted that potentially draws information from up to 4 tokens from each side BIBREF17 . Each update of the transition system's configuration is a classification task that uses the contextual representation of the top token on the stack, preceding and succeeding tokens, first two tokens of the buffer, and their leftmost, second leftmost, rightmost, second rightmost children. The valid transition with the highest score is applied to the system. This approach reportedly performs within 1% of the current state-of-the-art for English . In our experiments, we tried out 50-, 100-, 200- and 300-dimensional pre-trained GloVe embeddings. Due to time constraints, we did not tune the rest of hyperparameters and used their default values.",
+            "The main model that we focused on was the recurrent model with a CRF top layer, and the above-mentioned methods served mostly as baselines. The distinctive feature of this approach is the way contextual word embeddings are formed. For each token separately, to capture its word shape features, character-based representation is extracted using a bidirectional LSTM BIBREF18 . This representation gets concatenated with a distributional word vector such as GloVe, forming an intermediate word embedding. Using another bidirectional LSTM cell on these intermediate word embeddings, the contextual representation of tokens is obtained (Figure FIGREF17 ). Finally, a CRF layer labels the sequence of these contextual representations. In our experiments, we used Guillaume Genthial's implementation of the algorithm. We set the size of character-based biLSTM to 100 and the size of second biLSTM network to 300."
+          ],
+          "em": 0.0,
+          "f1": 0.5333333333333333,
+          "evidence_f1": 0.4253521126760564
+        },
+        {
+          "question": "what is the source of the news sentences?",
+          "query_type": "WHAT",
+          "doc_id": "1810.08699",
+          "ground_truth": "ilur.am",
+          "predicted": "The news sentences were taken from ilur.am (selected from over 250 news texts on ilur.am).",
+          "retrieved_contexts": [
+            "The accuracy of annotation in the generated corpus heavily relies on the quality of links in Wikipedia articles. During generation, we assumed that first mentions of all named entities have an outgoing link to their article, however this was not always the case in actual source data and as a result the train set contained sentences where not all named entities are labeled.",
+            "Included sentences are from political, sports, local and world news (Figures FIGREF8 , FIGREF9 ), covering the period between August 2012 and July 2018. The dataset provides annotations for 3 popular named entity classes: people (PER), organizations (ORG), and locations (LOC), and is released in CoNLL03 format with IOB tagging scheme. Tokens and sentences were segmented according to the UD standards for the Armenian language BIBREF11 .",
+            "\"ԱՄՆ նախագահական ընտրություններում\" (\"USA presidential elections\") is linked to the article ԱՄՆ նախագահական ընտրություններ 2016 (United States presidential election, 2016) and as a result [LOC ԱՄՆ] (USA) is lost). In order to evaluate the models trained on generated data, we manually annotated a named entities dataset comprising 53453 tokens and 2566 sentences selected from over 250 news texts from ilur. am. This dataset is comparable in size with the test sets of other languages (Table TABREF10 ).",
+            "Title: pioNER: Datasets and Baselines for Armenian Named Entity Recognition\nAbstract: In this work, we tackle the problem of Armenian named entity recognition, providing silver- and gold-standard datasets as well as establishing baseline results on popular models. We present a 163000-token named entity corpus automatically generated and annotated from Wikipedia, and another 53400-token corpus of news sentences with manual annotation of people, organization and location named entities.",
+            "The corpora were used to train and evaluate several popular named entity recognition models. Alongside the datasets, we release 50-, 100-, 200-, 300-dimensional GloVe word embeddings trained on a collection of Armenian texts from Wikipedia, news, blogs, and encyclopedia."
+          ],
+          "gold_evidence": [
+            "In order to evaluate the models trained on generated data, we manually annotated a named entities dataset comprising 53453 tokens and 2566 sentences selected from over 250 news texts from ilur.am. This dataset is comparable in size with the test sets of other languages (Table TABREF10 ). Included sentences are from political, sports, local and world news (Figures FIGREF8 , FIGREF9 ), covering the period between August 2012 and July 2018. The dataset provides annotations for 3 popular named entity classes: people (PER), organizations (ORG), and locations (LOC), and is released in CoNLL03 format with IOB tagging scheme. Tokens and sentences were segmented according to the UD standards for the Armenian language BIBREF11 .",
+            "We used Sysoev and Andrianov's modification of the Nothman et al. approach to automatically generate data for training a named entity recognizer. This approach uses links between Wikipedia articles to generate sequences of named-entity annotated tokens."
+          ],
+          "em": 0.0,
+          "f1": 0.125,
+          "evidence_f1": 0.5626373626373626
+        },
+        {
+          "question": "what are the topics pulled from Reddit?",
+          "query_type": "WHAT",
+          "doc_id": "1609.00425",
+          "ground_truth": "politics, business, science, and AskReddit, and 1000 additional posts from the Reddit frontpage.",
+          "predicted": "Topics mentioned include climate change, abortion, world news, relationship advice, the future of artificial intelligence, cooking, technology, and politics.",
+          "retrieved_contexts": [
+            "Posts on Reddit capture debate and discussion across a diverse set of topics, making them a natural starting point for untangling domain-independent linguistic features of dogmatism. Data collection. Subreddits are sub-communities on Reddit oriented around specific interests or topics, such as technology or politics. Sampling from Reddit as a whole would bias the model towards the most commonly discussed content.",
+            "Section: Introduction\n\nSection: Dogmatism data\n\nSection: Approaches to Identifying Dogmatism\n\nSection: Predicting dogmatism\n\nSection: Dogmatism in the Reddit Community \n\nSection: What subreddits have the highest and lowest levels of dogmatism? (R1)\n\nSection: How do dogmatic beliefs cluster? (R2)\n\nSection: What user behaviors are predictive of dogmatism? (R3)\n\nSection: How does dogmatism impact a conversation? (R4)\n\nSection: Related Work\n\nSection: Conclusion\n“I'm supposed to trust the opinion of a MS minion?",
+            "R3: How does dogmatism influence a conversation on social media? R4: How do other user behaviors (e. g. , frequency and breadth of posts) relate to dogmatism? We train a predictive model to classify dogmatic posts from Reddit, one of the most popular discussion communities on the web. Posts on Reddit capture discussion and debate across a diverse set of domains and topics – users talk about everything from climate change and abortion, to world news and relationship advice, to the future of artificial intelligence.",
+            "A similar flavor of work has examined linguistic models that capture politeness BIBREF2 , deception BIBREF24 , and authority BIBREF8 . We took inspiration from these models when constructing the feature sets in our work. Finally, while we examine what makes an opinion dogmatic, other work has pushed further into the structure of arguments, for example classifying their justifications BIBREF25 , or what makes an argument likely to win BIBREF26 .",
+            "For example, we might expect to see that subreddits oriented around topics such as abortion or climate change are more dogmatic, and subreddits about cooking are less so. To answer this question, we randomly sample 1. 6 million posts from the entire Reddit community between 2007 and 2015. We then annotate each of these posts with dogmatism using our classifier, and compute the average dogmatism level for each subreddit in the sample with at least 100 posts. We present the results of this analysis in Table 3 ."
+          ],
+          "gold_evidence": [
+            "Data collection. Subreddits are sub-communities on Reddit oriented around specific interests or topics, such as technology or politics. Sampling from Reddit as a whole would bias the model towards the most commonly discussed content. But by sampling posts from individual subreddits, we can control the kinds of posts we use to train our model. To collect a diverse training dataset, we have randomly sampled 1000 posts each from the subreddits politics, business, science, and AskReddit, and 1000 additional posts from the Reddit frontpage. All posts in our sample appeared between January 2007 and March 2015, and to control for length effects, contain between 300 and 400 characters. This results in a total training dataset of 5000 posts.",
+            "We now apply our dogmatism classifier to a larger dataset of posts, examining how dogmatic language shapes the Reddit community. Concretely, we apply the BOW+LING model trained on the full Reddit dataset to millions of new unannotated posts, labeling these posts with a probability of dogmatism according to the classifier (0=non-dogmatic, 1=dogmatic). We then use these dogmatism annotations to address four research questions."
+          ],
+          "em": 0.0,
+          "f1": 0.18749999999999997,
+          "evidence_f1": 0.4095063985374771
+        },
+        {
+          "question": "What predictive model do they build?",
+          "query_type": "WHAT",
+          "doc_id": "1609.00425",
+          "ground_truth": "logistic regression models",
+          "predicted": "They build a statistical predictive classification model that identifies dogmatic Reddit comments. It’s trained on a crowdsourced, dogmatism‑annotated corpus and uses linguistic features (e.g., signals of certainty/overconfidence) and behavioral features (e.g., posting frequency/breadth) to predict whether a post is dogmatic.",
+          "retrieved_contexts": [
+            "We present a statistical model of dogmatism that addresses two complementary goals. First, we validate psychological theories by examining the predictive power of feature sets that guide the model's predictions. For example, do linguistic signals of certainty help to predict a post is dogmatic, as theory would suggest? Second, we apply our model to answer four questions:\nR1: What kinds of topics (e. g. , guns, LGBT) attract the highest levels of dogmatism? R2: How do dogmatic beliefs cluster?",
+            "Section: Introduction\n\nSection: Dogmatism data\n\nSection: Approaches to Identifying Dogmatism\n\nSection: Predicting dogmatism\n\nSection: Dogmatism in the Reddit Community \n\nSection: What subreddits have the highest and lowest levels of dogmatism? (R1)\n\nSection: How do dogmatic beliefs cluster? (R2)\n\nSection: What user behaviors are predictive of dogmatism? (R3)\n\nSection: How does dogmatism impact a conversation? (R4)\n\nSection: Related Work\n\nSection: Conclusion\n“I'm supposed to trust the opinion of a MS minion?",
+            "Our model may allow future researchers to probe these questions more deeply. We have constructed the first corpus of social media posts annotated with dogmatism scores, allowing us to explore linguistic features of dogmatism and build a predictive model that analyzes new content. We apply this model to Reddit, where we discover behavioral predictors of dogmatism and topical patterns in the comments of dogmatic users. Could we use this computational model to help users shed their dogmatic beliefs?",
+            "R3: How does dogmatism influence a conversation on social media? R4: How do other user behaviors (e. g. , frequency and breadth of posts) relate to dogmatism? We train a predictive model to classify dogmatic posts from Reddit, one of the most popular discussion communities on the web. Posts on Reddit capture discussion and debate across a diverse set of domains and topics – users talk about everything from climate change and abortion, to world news and relationship advice, to the future of artificial intelligence.",
+            "Title: Identifying Dogmatism in Social Media: Signals and Models\nAbstract: We explore linguistic and behavioral features of dogmatism in social media and construct statistical models that can identify dogmatic comments. Our model is based on a corpus of Reddit posts, collected across a diverse set of conversational topics and annotated via paid crowdsourcing. We operationalize key aspects of dogmatism described by existing psychology theories (such as over-confidence), finding they have predictive power."
+          ],
+          "gold_evidence": [
+            "We compare the predictions of logistic regression models based on unigram bag-of-words features (BOW), sentiment signals (SENT), the linguistic features from our earlier analyses (LING), and combinations of these features. BOW and SENT provide baselines for the task. We compute BOW features using term frequency-inverse document frequency (TF-IDF) and category-based features by normalizing counts for each category by the number of words in each document. The BOW classifiers are trained with regularization (L2 penalties of 1.5)."
+          ],
+          "em": 0.0,
+          "f1": 0.0,
+          "evidence_f1": 0.13973799126637557
+        }
+      ]
+    },
+    "DenseRAG": {
+      "em": 0.0,
+      "f1": 0.18577191350848643,
+      "faithfulness": 0.5,
+      "hallucination_rate": 0.0,
+      "citation_accuracy": null,
+      "answer_correctness": 0.5833333333333334,
+      "answer_consistency": null,
+      "evidence_f1": 0.46065880132678044,
+      "num_samples": 8,
+      "per_query_type": {
+        "WHAT": {
+          "em": 0.0,
+          "f1": 0.18577191350848643,
+          "count": 8,
+          "evidence_f1": 0.46065880132678044
+        }
+      },
+      "raw_scores": [],
+      "per_sample": [
+        {
+          "question": "which multilingual approaches do they compare with?",
+          "query_type": "WHAT",
+          "doc_id": "1912.01214",
+          "ground_truth": "BIBREF19 ... BIBREF20",
+          "predicted": "They compare against:\n- Pivoting (translate source→pivot→target), including a strong pivoting_m that uses MNMT for each step.\n- Multilingual NMT (MNMT) / other multilingual baselines (the two additional non‑pretrained transfer baselines).\n- Transfer methods without cross‑lingual pretraining.\n- Existing cross‑lingual pretraining methods (MLM and TLM) as points of comparison.\n\nEvaluations are reported on multi‑parallel datasets (Europarl and MultiUN).",
+          "retrieved_contexts": [
+            "The results show that our approaches consistently outperform other approaches across languages and datasets, especially surpass pivoting, which is a strong baseline in the zero-shot scenario that multilingual NMT systems often fail to beat BIBREF19, BIBREF20, BIBREF23. Pivoting translates source to pivot then to target in two steps, causing inefficient translation process. Our approaches use one encoder-decoder model to translate between any zero-shot directions, which is more efficient than pivoting.",
+            "For the more complicated scenario that either the source side or the target side has multiple languages, the encoder and the decoder are also shared across each side languages for efficient deployment of translation between multiple languages. We evaluate our cross-lingual pre-training based transfer approach against several strong baselines on two public datatsets, Europarl BIBREF31 and MultiUN BIBREF32, which contain multi-parallel evaluation data to assess the zero-shot performance.",
+            "Although it is challenging for one model to translate all zero-shot directions between multiple distant language pairs of MultiUN, MLM+BRLM-SA still achieves better performances on Es $\\rightarrow $ Ar and Es $\\rightarrow $ Ru than strong pivoting$_{\\rm m}$, which uses MNMT to translate source to pivot then to target in two separate steps with each step receiving supervised signal of parallel corpora.",
+            "Two existing cross-lingual pre-training methods, Masked Language Modeling (MLM) and Translation Language Modeling (TLM), have shown their effectiveness on XNLI cross-lingual classification task BIBREF11, BIBREF28, but these methods have not been well studied on cross-lingual generation tasks in zero-shot condition. We attempt to take advantage of the cross-lingual ability of the two methods for zero-shot translation.",
+            "Regarding the comparison between transfer approaches, our cross-lingual pretraining based transfer outperforms transfer method that does not use pretraining by a large margin. Regarding comparison between the baselines in table TABREF19, we find that pivoting is the strongest baseline that has significant advantage over other two baselines."
+          ],
+          "gold_evidence": [
+            "Table TABREF19 and TABREF26 report zero-shot results on Europarl and Multi-UN evaluation sets, respectively. We compare our approaches with related approaches of pivoting, multilingual NMT (MNMT) BIBREF19, and cross-lingual transfer without pretraining BIBREF16. The results show that our approaches consistently outperform other approaches across languages and datasets, especially surpass pivoting, which is a strong baseline in the zero-shot scenario that multilingual NMT systems often fail to beat BIBREF19, BIBREF20, BIBREF23. Pivoting translates source to pivot then to target in two steps, causing inefficient translation process. Our approaches use one encoder-decoder model to translate between any zero-shot directions, which is more efficient than pivoting. Regarding the comparison between transfer approaches, our cross-lingual pretraining based transfer outperforms transfer method that does not use pretraining by a large margin."
+          ],
+          "em": 0.0,
+          "f1": 0.0,
+          "evidence_f1": 0.5245901639344261
+        },
+        {
+          "question": "what are the pivot-based baselines?",
+          "query_type": "WHAT",
+          "doc_id": "1912.01214",
+          "ground_truth": "pivoting ... pivoting$_{\\rm m}$",
+          "predicted": "The two pivot-based baselines are:\n- Pivoting: two-step translation (source → pivot → target).\n- Pseudo-data (pivot-derived synthetic training): train a source→target model on pseudo parallel data generated from source–pivot or pivot–target corpora.",
+          "retrieved_contexts": [
+            "Cross-lingual transfer for languages without shared vocabularies BIBREF16 manifests the worst performance because of not using source$\\leftrightarrow $pivot parallel data, which is utilized as beneficial supervised signal for the other two baselines. Our best approach of MLM+BRLM-SA achieves the significant superior performance to all baselines in the zero-shot directions, improving by 0. 9-4. 8 BLEU points over the strong pivoting.",
+            "While the former firstly translates a source language into the pivot language which is later translated to the target language BIBREF4, BIBREF5, BIBREF12, the latter trains a source$\\rightarrow $target model with pseudo data generated from source-pivot or pivot-target parallel data BIBREF13, BIBREF14.",
+            "Regarding the comparison between transfer approaches, our cross-lingual pretraining based transfer outperforms transfer method that does not use pretraining by a large margin. Regarding comparison between the baselines in table TABREF19, we find that pivoting is the strongest baseline that has significant advantage over other two baselines.",
+            "One common alternative to avoid pivoting in NMT is transfer learning BIBREF6, BIBREF7, BIBREF8, BIBREF9 which leverages a high-resource pivot$\\rightarrow $target model (parent) to initialize a low-resource source$\\rightarrow $target model (child) that is further optimized with a small amount of available parallel data. Although this approach has achieved success in some low-resource language pairs, it still performs very poorly in extremely low-resource or zero-resource translation scenario.",
+            "We first use external aligner tool on source$\\leftrightarrow $pivot parallel data to extract the alignment information of sentence pair. During model training, given source$\\leftrightarrow $pivot sentence pair, BRLM-HA randomly masks some words in source sentence and leverages alignment information to obtain the aligned words in pivot sentence for masked words. Based on the processed input, BRLM-HA adopts the Transformer BIBREF1 encoder to gain the hidden states for source and pivot sentences respectively."
+          ],
+          "gold_evidence": [
+            "Table TABREF19 and TABREF26 report zero-shot results on Europarl and Multi-UN evaluation sets, respectively. We compare our approaches with related approaches of pivoting, multilingual NMT (MNMT) BIBREF19, and cross-lingual transfer without pretraining BIBREF16. The results show that our approaches consistently outperform other approaches across languages and datasets, especially surpass pivoting, which is a strong baseline in the zero-shot scenario that multilingual NMT systems often fail to beat BIBREF19, BIBREF20, BIBREF23. Pivoting translates source to pivot then to target in two steps, causing inefficient translation process. Our approaches use one encoder-decoder model to translate between any zero-shot directions, which is more efficient than pivoting. Regarding the comparison between transfer approaches, our cross-lingual pretraining based transfer outperforms transfer method that does not use pretraining by a large margin.",
+            "Although it is challenging for one model to translate all zero-shot directions between multiple distant language pairs of MultiUN, MLM+BRLM-SA still achieves better performances on Es $\\rightarrow $ Ar and Es $\\rightarrow $ Ru than strong pivoting$_{\\rm m}$, which uses MNMT to translate source to pivot then to target in two separate steps with each step receiving supervised signal of parallel corpora. Our approaches surpass pivoting$_{\\rm m}$ in all zero-shot directions by adding back translation BIBREF33 to generate pseudo parallel sentences for all zero-shot directions based on our pretrained models such as MLM+BRLM-SA, and further training our universal encoder-decoder model with these pseudo data. BIBREF22 gu2019improved introduces back translation into MNMT, while we adopt it in our transfer approaches. Finally, our best MLM+BRLM-SA with back translation outperforms pivoting$_{\\rm m}$ by 2.4 BLEU points averagely, and outperforms MNMT BIBREF22 by 4.6 BLEU points averagely. Again, in supervised translation directions, MLM+BRLM-SA with back translation also achieves better performance than the original supervised Transformer.",
+            "We use traditional transfer learning, pivot-based method and multilingual NMT as our baselines. For the fair comparison, the Transformer-big model with 1024 embedding/hidden units, 4096 feed-forward filter size, 6 layers and 8 heads per layer is adopted for all translation models in our experiments. We set the batch size to 2400 per batch and limit sentence length to 100 BPE tokens. We set the $\\text{attn}\\_\\text{drop}=0$ (a dropout rate on each attention head), which is favorable to the zero-shot translation and has no effect on supervised translation directions BIBREF22. For the model initialization, we use Facebook's cross-lingual pretrained models released by XLM to initialize the encoder part, and the rest parameters are initialized with xavier uniform. We employ the Adam optimizer with $\\text{lr}=0.0001$, $t_{\\text{warm}\\_\\text{up}}=4000$ and $\\text{dropout}=0.1$. At decoding time, we generate greedily with length penalty $\\alpha =1.0$.",
+            "Pivot-based Method is a common strategy to obtain a source$\\rightarrow $target model by introducing a pivot language. This approach is further divided into pivoting and pivot-synthetic. While the former firstly translates a source language into the pivot language which is later translated to the target language BIBREF4, BIBREF5, BIBREF12, the latter trains a source$\\rightarrow $target model with pseudo data generated from source-pivot or pivot-target parallel data BIBREF13, BIBREF14. Although the pivot-based methods can achieve not bad performance, it always falls into a computation-expensive and parameter-vast dilemma of quadratic growth in the number of source languages, and suffers from the error propagation problem BIBREF15."
+          ],
+          "em": 0.0,
+          "f1": 0.0588235294117647,
+          "evidence_f1": 0.4710234278668311
+        },
+        {
+          "question": "which datasets did they experiment with?",
+          "query_type": "WHAT",
+          "doc_id": "1912.01214",
+          "ground_truth": "Europarl ... MultiUN",
+          "predicted": "They experimented on two public datasets: Europarl and MultiUN (Multi-UN).",
+          "retrieved_contexts": [
+            "Section: Experiments ::: Setup ::: Experimental Details. Section: Experiments ::: Main Results\n\nSection: Experiments ::: Main Results ::: Results on Europarl Dataset. Section: Experiments ::: Main Results ::: Results on MultiUN Dataset. Section: Experiments ::: Analysis ::: Sentence Representation. Section: Experiments ::: Analysis ::: Contextualized Word Representation. Section: Experiments ::: Analysis ::: The Effect of Freezing Parameters.",
+            "Experiments on public datasets show that our approaches significantly outperforms several strong baseline systems, and manifest the language invariance characteristics in both sentence level and word level neural representations. We would like to thank the anonymous reviewers for the helpful comments. This work was supported by National Key R&D Program of China (Grant No. 2016YFE0132100), National Natural Science Foundation of China (Grant No. 61525205, 61673289).",
+            "Experiments on two public datasets show that our approach significantly outperforms strong pivot-based baseline and various multilingual NMT approaches. Section: Introduction\n\nSection: Related Work\n\nSection: Approach\n\nSection: Approach ::: Masked and Translation Language Model Pretraining\n\nSection: Approach ::: Bridge Language Model Pretraining\n\nSection: Approach ::: Transfer Protocol\n\nSection: Experiments ::: Setup\n\nSection: Experiments ::: Setup ::: Datasets.",
+            "We set the batch size to 2400 per batch and limit sentence length to 100 BPE tokens. We set the $\\text{attn}\\_\\text{drop}=0$ (a dropout rate on each attention head), which is favorable to the zero-shot translation and has no effect on supervised translation directions BIBREF22. For the model initialization, we use Facebook's cross-lingual pretrained models released by XLM to initialize the encoder part, and the rest parameters are initialized with xavier uniform. We employ the Adam optimizer with $\\text{lr}=0.",
+            "Table TABREF19 and TABREF26 report zero-shot results on Europarl and Multi-UN evaluation sets, respectively. We compare our approaches with related approaches of pivoting, multilingual NMT (MNMT) BIBREF19, and cross-lingual transfer without pretraining BIBREF16."
+          ],
+          "gold_evidence": [
+            "We evaluate our cross-lingual pre-training based transfer approach against several strong baselines on two public datatsets, Europarl BIBREF31 and MultiUN BIBREF32, which contain multi-parallel evaluation data to assess the zero-shot performance. In all experiments, we use BLEU as the automatic metric for translation evaluation."
+          ],
+          "em": 0.0,
+          "f1": 0.33333333333333337,
+          "evidence_f1": 0.16507936507936508
+        },
+        {
+          "question": "what language pairs are explored?",
+          "query_type": "WHAT",
+          "doc_id": "1912.01214",
+          "ground_truth": "De-En, En-Fr, Fr-En, En-Es, Ro-En, En-De, Ar-En, En-Ru",
+          "predicted": "They explore two sets of multilingual setups:\n\n- Europarl: French–English–Spanish (Fr–En–Es), German–English–French (De–En–Fr) and Romanian–English–German (Ro–En–De). English is the pivot; zero‑shot evaluation focuses on the non‑pivot language pairs (e.g. Fr→Es, De→Fr, Ro→De).\n\n- MultiUN: English pivot with Arabic, Spanish and Russian (En–Ar–Es–Ru). English has parallel data with each of Ar/Es/Ru; zero‑shot evaluation covers the six mutual directions between Arabic, Spanish and Russian (examples: Es→Ar, Es→Ru).",
+          "retrieved_contexts": [
+            "For vocabulary, we use 60K sub-word tokens based on Byte Pair Encoding (BPE) BIBREF33. For MultiUN corpus, we use four languages: English (En) is set as the pivot language, which has parallel data with other three languages which do not have parallel data between each other. The three languages are Arabic (Ar), Spanish (Es), and Russian (Ru), and mutual translation between themselves constitutes six zero-shot translation direction for evaluation. We use 80K BPE splits as the vocabulary.",
+            "For the more complicated scenario that either the source side or the target side has multiple languages, the encoder and the decoder are also shared across each side languages for efficient deployment of translation between multiple languages. We evaluate our cross-lingual pre-training based transfer approach against several strong baselines on two public datatsets, Europarl BIBREF31 and MultiUN BIBREF32, which contain multi-parallel evaluation data to assess the zero-shot performance.",
+            "In all experiments, we use BLEU as the automatic metric for translation evaluation. The statistics of Europarl and MultiUN corpora are summarized in Table TABREF18. For Europarl corpus, we evaluate on French-English-Spanish (Fr-En-Es), German-English-French (De-En-Fr) and Romanian-English-German (Ro-En-De), where English acts as the pivot language, its left side is the source language, and its right side is the target language.",
+            "Although it is challenging for one model to translate all zero-shot directions between multiple distant language pairs of MultiUN, MLM+BRLM-SA still achieves better performances on Es $\\rightarrow $ Ar and Es $\\rightarrow $ Ru than strong pivoting$_{\\rm m}$, which uses MNMT to translate source to pivot then to target in two separate steps with each step receiving supervised signal of parallel corpora.",
+            "We remove the multi-parallel sentences between different training corpora to ensure zero-shot settings. We use the devtest2006 as the validation set and the test2006 as the test set for Fr$\\rightarrow $Es and De$\\rightarrow $Fr. For distant language pair Ro$\\rightarrow $De, we extract 1,000 overlapping sentences from newstest2016 as the test set and the 2,000 overlapping sentences split from the training set as the validation set since there is no official validation and test sets."
+          ],
+          "gold_evidence": [
+            "For MultiUN corpus, we use four languages: English (En) is set as the pivot language, which has parallel data with other three languages which do not have parallel data between each other. The three languages are Arabic (Ar), Spanish (Es), and Russian (Ru), and mutual translation between themselves constitutes six zero-shot translation direction for evaluation. We use 80K BPE splits as the vocabulary. Note that all sentences are tokenized by the tokenize.perl script, and we lowercase all data to avoid a large vocabulary for the MultiUN corpus.",
+            "The statistics of Europarl and MultiUN corpora are summarized in Table TABREF18. For Europarl corpus, we evaluate on French-English-Spanish (Fr-En-Es), German-English-French (De-En-Fr) and Romanian-English-German (Ro-En-De), where English acts as the pivot language, its left side is the source language, and its right side is the target language. We remove the multi-parallel sentences between different training corpora to ensure zero-shot settings. We use the devtest2006 as the validation set and the test2006 as the test set for Fr$\\rightarrow $Es and De$\\rightarrow $Fr. For distant language pair Ro$\\rightarrow $De, we extract 1,000 overlapping sentences from newstest2016 as the test set and the 2,000 overlapping sentences split from the training set as the validation set since there is no official validation and test sets. For vocabulary, we use 60K sub-word tokens based on Byte Pair Encoding (BPE) BIBREF33.",
+            "FLOAT SELECTED: Table 1: Data Statistics."
+          ],
+          "em": 0.0,
+          "f1": 0.0,
+          "evidence_f1": 0.7407407407407406
+        },
+        {
+          "question": "what ner models were evaluated?",
+          "query_type": "WHAT",
+          "doc_id": "1810.08699",
+          "ground_truth": "Stanford NER ... spaCy 2.0 ... recurrent model with a CRF top layer",
+          "predicted": "They evaluated three NER systems: Stanford NER (CRF, feature-based), spaCy 2.0 (CNN-based transition system), and a recurrent neural model (char-biLSTM + biLSTM + CRF).",
+          "retrieved_contexts": [
+            "We trained and evaluated Stanford NER, spaCy 2. 0, and a recurrent model similar to BIBREF13 , BIBREF14 that uses bidirectional LSTM cells for character-based feature extraction and CRF, described in Guillaume Genthial's Sequence Tagging with Tensorflow blog post BIBREF15 .",
+            "GloVe word vector models of four different sizes (50, 100, 200, and 300) were tested, with vectors of size 50 producing the best results (Table TABREF20 ). For spaCy 2. 0 named entity recognizer, the same word embedding models were tested. However, in this case the performance of 200-dimensional embeddings was highest (Table TABREF21 ). Unsurprisingly, both deep learning models outperformed the feature-based Stanford recognizer in recall, the latter however demonstrated noticeably higher precision.",
+            "Generally, tested models demonstrated relatively high precision of recognizing tokens that started named entities, but failed to do so with descriptor words for organizations and, to a certain degree, locations. The confusion matrix for one of the trained recurrent models illustrates that difference (Table TABREF22 ). This can be partly attributed to the quality of generated data: descriptor words are sometimes superfluously labeled (e. g.",
+            "It is clear that the development set of automatically generated examples was not an ideal indicator of models' performance on gold-standard test set. Higher development set scores often led to lower test scores as seen in the evaluation results for spaCy 2. 0 and Char-biLSTM+biLSTM+CRF (Tables TABREF21 and TABREF20 ).",
+            "Stanford NER is conditional random fields (CRF) classifier based on lexical and contextual features such as the current word, character-level n-grams of up to length 6 at its beginning and the end, previous and next words, word shape and sequence features BIBREF16 . spaCy 2. 0 uses a CNN-based transition system for named entity recognition."
+          ],
+          "gold_evidence": [
+            "In this section we describe a number of experiments targeted to compare the performance of popular named entity recognition algorithms on our data. We trained and evaluated Stanford NER, spaCy 2.0, and a recurrent model similar to BIBREF13 , BIBREF14 that uses bidirectional LSTM cells for character-based feature extraction and CRF, described in Guillaume Genthial's Sequence Tagging with Tensorflow blog post BIBREF15 .",
+            "Stanford NER is conditional random fields (CRF) classifier based on lexical and contextual features such as the current word, character-level n-grams of up to length 6 at its beginning and the end, previous and next words, word shape and sequence features BIBREF16 .",
+            "spaCy 2.0 uses a CNN-based transition system for named entity recognition. For each token, a Bloom embedding is calculated based on its lowercase form, prefix, suffix and shape, then using residual CNNs, a contextual representation of that token is extracted that potentially draws information from up to 4 tokens from each side BIBREF17 . Each update of the transition system's configuration is a classification task that uses the contextual representation of the top token on the stack, preceding and succeeding tokens, first two tokens of the buffer, and their leftmost, second leftmost, rightmost, second rightmost children. The valid transition with the highest score is applied to the system. This approach reportedly performs within 1% of the current state-of-the-art for English . In our experiments, we tried out 50-, 100-, 200- and 300-dimensional pre-trained GloVe embeddings. Due to time constraints, we did not tune the rest of hyperparameters and used their default values.",
+            "The main model that we focused on was the recurrent model with a CRF top layer, and the above-mentioned methods served mostly as baselines. The distinctive feature of this approach is the way contextual word embeddings are formed. For each token separately, to capture its word shape features, character-based representation is extracted using a bidirectional LSTM BIBREF18 . This representation gets concatenated with a distributional word vector such as GloVe, forming an intermediate word embedding. Using another bidirectional LSTM cell on these intermediate word embeddings, the contextual representation of tokens is obtained (Figure FIGREF17 ). Finally, a CRF layer labels the sequence of these contextual representations. In our experiments, we used Guillaume Genthial's implementation of the algorithm. We set the size of character-based biLSTM to 100 and the size of second biLSTM network to 300."
+          ],
+          "em": 0.0,
+          "f1": 0.4848484848484849,
+          "evidence_f1": 0.46686746987951805
+        },
+        {
+          "question": "what is the source of the news sentences?",
+          "query_type": "WHAT",
+          "doc_id": "1810.08699",
+          "ground_truth": "ilur.am",
+          "predicted": "The sentences come from political, sports, local and world news articles from the Armenian news site ilur.am (covering Aug 2012–July 2018).",
+          "retrieved_contexts": [
+            "Included sentences are from political, sports, local and world news (Figures FIGREF8 , FIGREF9 ), covering the period between August 2012 and July 2018. The dataset provides annotations for 3 popular named entity classes: people (PER), organizations (ORG), and locations (LOC), and is released in CoNLL03 format with IOB tagging scheme. Tokens and sentences were segmented according to the UD standards for the Armenian language BIBREF11 .",
+            "The accuracy of annotation in the generated corpus heavily relies on the quality of links in Wikipedia articles. During generation, we assumed that first mentions of all named entities have an outgoing link to their article, however this was not always the case in actual source data and as a result the train set contained sentences where not all named entities are labeled.",
+            "Instead, our classification algorithm uses only an article's Wikidata entry's first instance of label's parent subclass of labels, which are, incidentally, language independent and thus can be used for any language. Then, outgoing links in articles are assigned the article's type they are leading to. Sentences are included in the training corpus only if they contain at least one named entity and all contained capitalized words have an outgoing link to an article of known type.",
+            "\"ԱՄՆ նախագահական ընտրություններում\" (\"USA presidential elections\") is linked to the article ԱՄՆ նախագահական ընտրություններ 2016 (United States presidential election, 2016) and as a result [LOC ԱՄՆ] (USA) is lost). In order to evaluate the models trained on generated data, we manually annotated a named entities dataset comprising 53453 tokens and 2566 sentences selected from over 250 news texts from ilur. am. This dataset is comparable in size with the test sets of other languages (Table TABREF10 ).",
+            "the article Քիմ Քաշքաշյան (Kim Kashkashian) is classified as PER (person), Ազգերի լիգա(League of Nations) as ORG (organization), Սիրիա(Syria) as LOC etc). One of the core differences between our approach and Nothman's system is that we do not rely on manual classification of articles and do not use inter-language links to project article classifications across languages."
+          ],
+          "gold_evidence": [
+            "In order to evaluate the models trained on generated data, we manually annotated a named entities dataset comprising 53453 tokens and 2566 sentences selected from over 250 news texts from ilur.am. This dataset is comparable in size with the test sets of other languages (Table TABREF10 ). Included sentences are from political, sports, local and world news (Figures FIGREF8 , FIGREF9 ), covering the period between August 2012 and July 2018. The dataset provides annotations for 3 popular named entity classes: people (PER), organizations (ORG), and locations (LOC), and is released in CoNLL03 format with IOB tagging scheme. Tokens and sentences were segmented according to the UD standards for the Armenian language BIBREF11 .",
+            "We used Sysoev and Andrianov's modification of the Nothman et al. approach to automatically generate data for training a named entity recognizer. This approach uses links between Wikipedia articles to generate sequences of named-entity annotated tokens."
+          ],
+          "em": 0.0,
+          "f1": 0.0909090909090909,
+          "evidence_f1": 0.5405405405405406
+        },
+        {
+          "question": "what are the topics pulled from Reddit?",
+          "query_type": "WHAT",
+          "doc_id": "1609.00425",
+          "ground_truth": "politics, business, science, and AskReddit, and 1000 additional posts from the Reddit frontpage.",
+          "predicted": "The dataset sampled posts from these subreddits/topics:\n- politics\n- business\n- science\n- AskReddit\n- Reddit frontpage\n\n(Additional example topics mentioned in the text include climate change, abortion, cooking, Bitcoin, socialism, technology, UpliftingNews, photoshopbattles, firstworldanarchist, and millionairemakers.)",
+          "retrieved_contexts": [
+            "Posts on Reddit capture debate and discussion across a diverse set of topics, making them a natural starting point for untangling domain-independent linguistic features of dogmatism. Data collection. Subreddits are sub-communities on Reddit oriented around specific interests or topics, such as technology or politics. Sampling from Reddit as a whole would bias the model towards the most commonly discussed content.",
+            "But by sampling posts from individual subreddits, we can control the kinds of posts we use to train our model. To collect a diverse training dataset, we have randomly sampled 1000 posts each from the subreddits politics, business, science, and AskReddit, and 1000 additional posts from the Reddit frontpage. All posts in our sample appeared between January 2007 and March 2015, and to control for length effects, contain between 300 and 400 characters. This results in a total training dataset of 5000 posts.",
+            "R3: How does dogmatism influence a conversation on social media? R4: How do other user behaviors (e. g. , frequency and breadth of posts) relate to dogmatism? We train a predictive model to classify dogmatic posts from Reddit, one of the most popular discussion communities on the web. Posts on Reddit capture discussion and debate across a diverse set of domains and topics – users talk about everything from climate change and abortion, to world news and relationship advice, to the future of artificial intelligence.",
+            "For example, we might expect to see that subreddits oriented around topics such as abortion or climate change are more dogmatic, and subreddits about cooking are less so. To answer this question, we randomly sample 1. 6 million posts from the entire Reddit community between 2007 and 2015. We then annotate each of these posts with dogmatism using our classifier, and compute the average dogmatism level for each subreddit in the sample with at least 100 posts. We present the results of this analysis in Table 3 .",
+            "Similarly, people who are dogmatic in the business subreddit also tend to be dogmatic in subreddits for Bitcoin, socialism, and technology. Notably, when we apply the same mutual information analysis to links defined by subreddits posted in by the same user, we see dramatically different results. For example, the subreddits most linked to science through user posts are UpliftingNews, photoshopbattles, and firstworldanarchist, and millionairemakers."
+          ],
+          "gold_evidence": [
+            "Data collection. Subreddits are sub-communities on Reddit oriented around specific interests or topics, such as technology or politics. Sampling from Reddit as a whole would bias the model towards the most commonly discussed content. But by sampling posts from individual subreddits, we can control the kinds of posts we use to train our model. To collect a diverse training dataset, we have randomly sampled 1000 posts each from the subreddits politics, business, science, and AskReddit, and 1000 additional posts from the Reddit frontpage. All posts in our sample appeared between January 2007 and March 2015, and to control for length effects, contain between 300 and 400 characters. This results in a total training dataset of 5000 posts.",
+            "We now apply our dogmatism classifier to a larger dataset of posts, examining how dogmatic language shapes the Reddit community. Concretely, we apply the BOW+LING model trained on the full Reddit dataset to millions of new unannotated posts, labeling these posts with a probability of dogmatism according to the classifier (0=non-dogmatic, 1=dogmatic). We then use these dogmatism annotations to address four research questions."
+          ],
+          "em": 0.0,
+          "f1": 0.47826086956521735,
+          "evidence_f1": 0.5448028673835126
+        },
+        {
+          "question": "What predictive model do they build?",
+          "query_type": "WHAT",
+          "doc_id": "1609.00425",
+          "ground_truth": "logistic regression models",
+          "predicted": "They build a logistic‑regression classifier that predicts dogmatism in text. The models use feature sets including unigram bag‑of‑words (BOW) and sentiment baselines plus linguistically motivated features (certainty, other psycholinguistic signals) derived from their analyses; the linguistics‑based model performs strongly and generalizes to held‑out New York Times comments.",
+          "retrieved_contexts": [
+            "A predictive model further validates our feature sets, and also allows us to analyze dogmatism in millions of other Reddit comments in a scalable way, with multiple uses in ongoing, downstream analyses. Prediction task. Our goal is (1) to understand how well we can use the strategies in Section 3 to predict dogmatism, and (2) to test the domain-independence of these strategies. First, we test the performance of our model under cross-validation within the Reddit comment dataset.",
+            "Our model may allow future researchers to probe these questions more deeply. We have constructed the first corpus of social media posts annotated with dogmatism scores, allowing us to explore linguistic features of dogmatism and build a predictive model that analyzes new content. We apply this model to Reddit, where we discover behavioral predictors of dogmatism and topical patterns in the comments of dogmatic users. Could we use this computational model to help users shed their dogmatic beliefs?",
+            "We present a statistical model of dogmatism that addresses two complementary goals. First, we validate psychological theories by examining the predictive power of feature sets that guide the model's predictions. For example, do linguistic signals of certainty help to predict a post is dogmatic, as theory would suggest? Second, we apply our model to answer four questions:\nR1: What kinds of topics (e. g. , guns, LGBT) attract the highest levels of dogmatism? R2: How do dogmatic beliefs cluster?",
+            "This means the classes are balanced, with 2,500 total comments in the Reddit training data and 500 total comments in the New York Times testing data. We compare the predictions of logistic regression models based on unigram bag-of-words features (BOW), sentiment signals (SENT), the linguistic features from our earlier analyses (LING), and combinations of these features. BOW and SENT provide baselines for the task.",
+            "881) and on the held out New York Times comments (0. 791). While linguistic signals by themselves provide strong predictive power (0. 801 AUC within domain), sentiment signals are much less predictive. These results suggest that linguistic features inspired by prior efforts in psychology are useful for predicting dogmatism in practice and generalize across new domains. We now apply our dogmatism classifier to a larger dataset of posts, examining how dogmatic language shapes the Reddit community."
+          ],
+          "gold_evidence": [
+            "We compare the predictions of logistic regression models based on unigram bag-of-words features (BOW), sentiment signals (SENT), the linguistic features from our earlier analyses (LING), and combinations of these features. BOW and SENT provide baselines for the task. We compute BOW features using term frequency-inverse document frequency (TF-IDF) and category-based features by normalizing counts for each category by the number of words in each document. The BOW classifiers are trained with regularization (L2 penalties of 1.5)."
+          ],
+          "em": 0.0,
+          "f1": 0.04,
+          "evidence_f1": 0.2316258351893096
+        }
+      ]
+    }
+  }
+}

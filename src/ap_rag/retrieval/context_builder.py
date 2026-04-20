@@ -151,7 +151,9 @@ class ContextBuilder:
                 continue
             label = _NODE_TYPE_LABELS[node_type]
             for node in grouped[node_type]:
-                lines.append(f"{label} {node.text}")
+                # 原文 verbatim span があればそれを使う (パラフレーズによる
+                # 情報欠落を避け、WHAT 型の固有名詞・数値・用語を保存)。
+                lines.append(f"{label} {node.verbatim_text}")
 
         lines.append("--- 参照情報ここまで ---")
         return "\n".join(lines)

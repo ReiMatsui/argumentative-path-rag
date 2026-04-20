@@ -136,6 +136,8 @@ def build_and_index_argumentative_rag(
     embedding_device: str,
     use_cross_chunk: bool = False,
     shared_encoder=None,
+    classifier_model: str = "gpt-4o-mini",
+    generator_model: str = "gpt-4o-mini",
 ):
     """ArgumentativeRAGPipeline を構築し、全論文をインデックスする。
 
@@ -166,7 +168,7 @@ def build_and_index_argumentative_rag(
         encoder=shared_encoder,
     )
 
-    edge_extractor = EdgeExtractor(client=client, model="gpt-4o-mini")
+    edge_extractor = EdgeExtractor(client=client, model=classifier_model)
     cross_chunk = None
     if use_cross_chunk:
         console.print(
@@ -186,10 +188,12 @@ def build_and_index_argumentative_rag(
     store = NetworkXGraphStore()
     indexer = IndexingPipeline(
         chunker=SentenceChunker(),
-        classifier=NodeClassifier(client=client, model="gpt-4o-mini"),
+        classifier=NodeClassifier(client=client, model=classifier_model),
         extractor=edge_extractor,
         store=store,
-        show_progress=False,
+        # チャンク単位の進行状況バーを表示（reasoning モデルは 1 チャンクあたり
+        # 数秒〜十数秒かかるため、進捗が見えないと不安になる）。
+        show_progress=True,
         cross_chunk_extractor=cross_chunk,
     )
 
@@ -197,8 +201,9 @@ def build_and_index_argumentative_rag(
     for i, (paper_id, full_text) in enumerate(raw_by_paper.items(), 1):
         short_id = paper_id[:16] + "..."
         console.print(f"  [cyan]({i}/{len(raw_by_paper)}) インデックス中: {short_id}[/]")
-        with console.status(f"[dim]グラフ構築中 — {short_id}[/]"):
-            result = indexer.run(full_text, doc_id=paper_id)
+        # IndexingPipeline 側が rich.Progress で進捗バーを出すので、
+        # ここで console.status を被せると Live が入れ子になって壊れる。
+        result = indexer.run(full_text, doc_id=paper_id)
         stats = result.graph.stats()
         total_nodes += stats["total_nodes"]
         total_edges += stats["total_edges"]
@@ -212,10 +217,10 @@ def build_and_index_argumentative_rag(
 
     pipeline = ArgumentativeRAGPipeline(
         store=store,
-        query_classifier=QueryClassifier(client=client, model="gpt-4o-mini"),
+        query_classifier=QueryClassifier(client=client, model=generator_model),
         traverser=GraphTraverser(store=store),
         context_builder=ContextBuilder(max_nodes=15),
-        generator=AnswerGenerator(client=client, model="gpt-4o-mini"),
+        generator=AnswerGenerator(client=client, model=generator_model),
         node_selector=node_selector,
     )
     return pipeline
@@ -223,12 +228,12 @@ def build_and_index_argumentative_rag(
 
 # ── BM25RAG の構築・インデックス ──────────────────────────────────────────────
 
-def build_and_index_bm25(client, raw_by_paper: dict[str, str]):
+def build_and_index_bm25(client, raw_by_paper: dict[str, str], generator_model: str = "gpt-4o-mini"):
     """BM25RAG を構築し、論文テキストをチャンク分割してインデックスする。"""
     from ap_rag.evaluation.baselines import BM25RAG
     from ap_rag.indexing.chunker import SentenceChunker
 
-    rag = BM25RAG(client=client, top_k=5)
+    rag = BM25RAG(client=client, top_k=5, model=generator_model)
     chunker = SentenceChunker()
     total_chunks = 0
 
@@ -250,6 +255,7 @@ def build_and_index_dense(
     embedding_model: str,
     embedding_device: str,
     shared_encoder=None,
+    generator_model: str = "gpt-4o-mini",
 ):
     """DenseRAG（埋め込み検索）を構築し、論文テキストをインデックスする。
 
@@ -268,6 +274,7 @@ def build_and_index_dense(
         embedding_model=embedding_model,
         device=embedding_device,
         encoder=shared_encoder,
+        model=generator_model,
     )
     chunker = SentenceChunker()
     total_chunks = 0
@@ -470,6 +477,9 @@ def main(
     embedding_backend: str = "sentence-transformers",
     openai_embedding_model: str = "text-embedding-3-small",
     save_json: str | None = None,
+    classifier_model: str = "gpt-4o-mini",
+    generator_model: str = "gpt-4o-mini",
+    judge_model: str = "gpt-4o-mini",
 ) -> None:
     consistency_note = (
         f" / Consistency: {consistency_runs}×" if consistency_runs >= 2 else ""
@@ -490,7 +500,8 @@ def main(
         f"[dim]論文 {num_papers} 件 × 各 {num_questions} 問 / "
         f"LLM-as-Judge: {'有効' if use_judge else 'スキップ'} / "
         f"Dense: {'有効' if use_dense else 'スキップ'} / "
-        f"入口選定: {selector_label}"
+        f"入口選定: {selector_label}\n"
+        f"classifier={classifier_model} / generator={generator_model} / judge={judge_model}"
         f"{backend_note}{cross_chunk_note}{consistency_note}[/]",
         border_style="cyan",
     ))
@@ -539,10 +550,12 @@ def main(
         client, raw_by_paper, embedding_model_label, embedding_device,
         use_cross_chunk=use_cross_chunk,
         shared_encoder=shared_encoder,
+        classifier_model=classifier_model,
+        generator_model=generator_model,
     )
 
     console.print("[bold]BM25RAG:[/]")
-    bm25_rag = build_and_index_bm25(client, raw_by_paper)
+    bm25_rag = build_and_index_bm25(client, raw_by_paper, generator_model=generator_model)
 
     dense_rag = None
     if use_dense:
@@ -555,14 +568,15 @@ def main(
             embedding_model_label if embedding_backend == "openai" else dense_model,
             embedding_device,
             shared_encoder=shared_encoder,
+            generator_model=generator_model,
         )
 
     # ── Step 3: LLM-as-Judge セットアップ ────────────────────────────────────
     judge = None
     if use_judge:
         from ap_rag.evaluation.metrics import LLMJudge
-        judge = LLMJudge(client=client)
-        console.print("\n[cyan]LLM-as-Judge:[/] 有効\n")
+        judge = LLMJudge(client=client, model=judge_model)
+        console.print(f"\n[cyan]LLM-as-Judge:[/] 有効 (model={judge_model})\n")
 
     # ── Step 4: 評価実行 ──────────────────────────────────────────────────────
     # --save-json を指定されたときだけ per-sample 記録を保持する
@@ -615,6 +629,9 @@ def main(
                         "embedding_backend": embedding_backend,
                         "openai_embedding_model": openai_embedding_model,
                         "consistency_runs": consistency_runs,
+                        "classifier_model": classifier_model,
+                        "generator_model": generator_model,
+                        "judge_model": judge_model,
                     },
                     "results": dumped,
                 },
@@ -624,6 +641,16 @@ def main(
 
 
 if __name__ == "__main__":
+    # .env を argparse 解釈前にロードして、モデル系フラグの既定値として使う
+    from dotenv import load_dotenv
+    load_dotenv()
+    _env_classifier = os.environ.get("OPENAI_CLASSIFIER_MODEL", "gpt-4o-mini")
+    _env_generator = os.environ.get("OPENAI_GENERATOR_MODEL", "gpt-4o-mini")
+    _env_judge = os.environ.get("OPENAI_JUDGE_MODEL", _env_generator)
+    # reasoning_effort は openai_compat が環境変数から読むので、
+    # ここでは CLI フラグ経由で `OPENAI_REASONING_EFFORT` を書き換える形にする。
+    _env_reasoning = os.environ.get("OPENAI_REASONING_EFFORT", "low")
+
     parser = argparse.ArgumentParser(description="QASPER ミニ評価")
     parser.add_argument("--papers",    type=int, default=3,  help="論文数（デフォルト: 3）")
     parser.add_argument("--questions", type=int, default=5,  help="論文あたりの質問数（デフォルト: 5）")
@@ -692,7 +719,51 @@ if __name__ == "__main__":
         default=None,
         help="指定したパスに評価結果を JSON で保存する。GO/NO-GO レポート生成用。",
     )
+    parser.add_argument(
+        "--classifier-model",
+        type=str,
+        default=_env_classifier,
+        help=(
+            "グラフ構築 (NodeClassifier + EdgeExtractor) に使う LLM。"
+            f"既定: .env の OPENAI_CLASSIFIER_MODEL (現在: {_env_classifier})。"
+        ),
+    )
+    parser.add_argument(
+        "--generator-model",
+        type=str,
+        default=_env_generator,
+        help=(
+            "QueryClassifier / AnswerGenerator (AP / BM25 / Dense) に使う LLM。"
+            f"既定: .env の OPENAI_GENERATOR_MODEL (現在: {_env_generator})。"
+        ),
+    )
+    parser.add_argument(
+        "--judge-model",
+        type=str,
+        default=_env_judge,
+        help=(
+            "LLM-as-Judge に使う LLM。"
+            f"既定: .env の OPENAI_JUDGE_MODEL (現在: {_env_judge}, "
+            "未設定時は generator と同じ)。"
+        ),
+    )
+    parser.add_argument(
+        "--reasoning-effort",
+        type=str,
+        default=_env_reasoning,
+        choices=["minimal", "low", "medium", "high"],
+        help=(
+            "gpt-5 系 / o-series の reasoning_effort。推論トークン量に直結し、"
+            "低いほど高速・安価。分類・抽出タスクは 'low' で十分なことが多い。"
+            f"既定: .env の OPENAI_REASONING_EFFORT (現在: {_env_reasoning})。"
+        ),
+    )
     args = parser.parse_args()
+
+    # CLI フラグを openai_compat が参照する環境変数に書き戻すことで、
+    # classifier / extractor / generator 等の全コンポーネントに一括で効かせる。
+    # （各クラスに reasoning_effort パラメータを足すより配管が少ない）
+    os.environ["OPENAI_REASONING_EFFORT"] = args.reasoning_effort
 
     if args.debug:
         logging.basicConfig(level=logging.DEBUG)
@@ -712,4 +783,7 @@ if __name__ == "__main__":
         embedding_backend=args.embedding_backend,
         openai_embedding_model=args.openai_embedding_model,
         save_json=args.save_json,
+        classifier_model=args.classifier_model,
+        generator_model=args.generator_model,
+        judge_model=args.judge_model,
     )

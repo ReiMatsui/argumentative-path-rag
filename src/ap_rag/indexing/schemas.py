@@ -28,7 +28,23 @@ class NodeItem(BaseModel):
             "CLAIM, EVIDENCE, ASSUMPTION, CONCLUSION, CAVEAT, CONTRAST, DEFINITION."
         )
     )
-    text: str = Field(description="The verbatim or paraphrased argumentative unit text.")
+    text: str = Field(
+        description=(
+            "A short normalized label for display (may be a paraphrase). "
+            "Keep it under ~200 characters. The lossless original is in source_span."
+        )
+    )
+    source_span: str = Field(
+        default="",
+        description=(
+            "Verbatim substring of the input passage that this node covers. "
+            "MUST be a character-for-character copy from the passage — do not "
+            "rewrite, summarize, translate, or normalize. Preserve numbers, "
+            "named entities, citations, and punctuation exactly. "
+            "If absolutely no verbatim substring applies (e.g. the unit is a "
+            "synthesis of multiple sentences), return an empty string."
+        ),
+    )
 
 
 class NodeClassificationOutput(BaseModel):

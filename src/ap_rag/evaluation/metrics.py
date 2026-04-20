@@ -16,6 +16,8 @@ import string
 from dataclasses import dataclass, field
 from typing import Any
 
+from ap_rag.openai_compat import max_tokens_kwarg, reasoning_kwarg, sampling_kwargs
+
 
 # ── 評価サンプル ──────────────────────────────────────────────────────────────
 
@@ -235,8 +237,9 @@ class LLMJudge:
         response = self._client.chat.completions.create(
             model=self._model,
             messages=[{"role": "user", "content": prompt}],
-            temperature=0.0,
-            max_tokens=5,
+            **sampling_kwargs(self._model, temperature=0.0),
+            **max_tokens_kwarg(self._model, 5),
+            **reasoning_kwarg(self._model),
         )
         verdict = (response.choices[0].message.content or "").strip().upper()
         return verdict.startswith("YES")
@@ -252,8 +255,9 @@ class LLMJudge:
         response = self._client.chat.completions.create(
             model=self._model,
             messages=[{"role": "user", "content": prompt}],
-            temperature=0.0,
-            max_tokens=10,
+            **sampling_kwargs(self._model, temperature=0.0),
+            **max_tokens_kwarg(self._model, 10),
+            **reasoning_kwarg(self._model),
         )
         raw = (response.choices[0].message.content or "").strip()
         try:
@@ -281,8 +285,9 @@ class LLMJudge:
         response = self._client.chat.completions.create(
             model=self._model,
             messages=[{"role": "user", "content": prompt}],
-            temperature=0.0,
-            max_tokens=10,
+            **sampling_kwargs(self._model, temperature=0.0),
+            **max_tokens_kwarg(self._model, 10),
+            **reasoning_kwarg(self._model),
         )
         raw = (response.choices[0].message.content or "").strip()
         try:

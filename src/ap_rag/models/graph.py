@@ -37,6 +37,14 @@ class ArgumentNode(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     node_type: NodeType
     text: str
+    source_span: str | None = Field(
+        default=None,
+        description=(
+            "LLM 分類時に記録した原文 verbatim スパン。ContextBuilder と "
+            "Evidence-F1 計算ではこちらを優先し、欠けている場合のみ text に "
+            "フォールバックする。None は後方互換用 (既存スナップショット)。"
+        ),
+    )
     source_doc_id: str
     source_chunk_idx: int = Field(ge=0)
     embedding: list[float] | None = Field(default=None, exclude=True)
@@ -51,6 +59,13 @@ class ArgumentNode(BaseModel):
         if not v.strip():
             raise ValueError("text は空文字列にできません")
         return v.strip()
+
+    @property
+    def verbatim_text(self) -> str:
+        """原文 span があればそれを、なければ text を返す共通アクセサ。"""
+        if self.source_span and self.source_span.strip():
+            return self.source_span.strip()
+        return self.text
 
 
 # ── エッジ ────────────────────────────────────────────────────────────────────

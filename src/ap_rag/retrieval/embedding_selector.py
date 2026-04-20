@@ -224,5 +224,7 @@ class EmbeddingNodeSelector:
         E5-Mistral はパッセージ側にプレフィックス不要。
         ノードタイプをプレフィックスとして付与することで、モデルが
         「これはCLAIMである」という文脈を持てるようにする。
+        embedding ターゲットには原文 span を優先する (verbatim_text)。
         """
-        return f"{node.node_type.value}: {node.text}"
+        text = getattr(node, "verbatim_text", None) or node.text
+        return f"{node.node_type.value}: {text}"

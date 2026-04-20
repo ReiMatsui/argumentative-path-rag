@@ -17,11 +17,12 @@
 from __future__ import annotations
 
 import logging
+import sys
 import threading
 from concurrent.futures import Future, ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 
-from rich.progress import BarColumn, Progress, SpinnerColumn, TaskProgressColumn, TextColumn
+from tqdm.auto import tqdm
 
 from ap_rag.graph.store import GraphStore
 from ap_rag.indexing.chunker import DocumentChunk, SentenceChunker
@@ -223,22 +224,29 @@ class IndexingPipeline:
         chunks: list[DocumentChunk],
         graph: ArgumentGraph,
     ) -> None:
-        """進行状況バー付きの並列処理。"""
+        """進行状況バー付きの並列処理。
+
+        tqdm を使う理由:
+          - rich.Progress は stdout が非 TTY だと live rendering を黙ってスキップする
+            ため、`2>&1 | tee log.txt` 経由で実行すると進捗が見えなかった。
+          - tqdm は標準で stderr に書き、非 TTY のときは行単位の更新に自動で
+            フォールバックするのでターミナル・ログファイル両方で進捗が見える。
+        """
         lock = threading.Lock()
         total = len(chunks)
 
-        with Progress(
-            SpinnerColumn(),
-            TextColumn("[progress.description]{task.description}"),
-            BarColumn(),
-            TaskProgressColumn(),
-            transient=True,
-        ) as progress:
-            task = progress.add_task(
-                f"インデックス中… (並列数={self._max_workers})",
-                total=total,
-            )
+        # 進捗バーは stderr に出す (stdout が tee にパイプされてもターミナルに残りやすい)
+        # mininterval を上げて非 TTY 時の出力行数を抑える
+        pbar = tqdm(
+            total=total,
+            desc=f"インデックス中 (並列={self._max_workers})",
+            unit="chunk",
+            file=sys.stderr,
+            mininterval=0.5,
+            dynamic_ncols=True,
+        )
 
+        try:
             with ThreadPoolExecutor(max_workers=self._max_workers) as executor:
                 future_to_chunk: dict[Future[_ChunkResult], DocumentChunk] = {
                     executor.submit(self._call_llm_for_chunk, chunk): chunk
@@ -250,15 +258,14 @@ class IndexingPipeline:
                         chunk_result = future.result()
                     except Exception as e:
                         logger.warning("チャンク %d の処理でエラー: %s", chunk.chunk_idx, e)
-                        progress.advance(task)
+                        pbar.update(1)
                         continue
 
                     self._write_chunk_result(chunk_result, graph, lock)
-                    progress.update(
-                        task,
-                        advance=1,
-                        description=(
-                            f"インデックス中… (並列数={self._max_workers})"
-                            f" [{chunk_result.chunk_idx + 1}/{total} 完了]"
-                        ),
+                    pbar.set_postfix_str(
+                        f"nodes={len(chunk_result.nodes)} edges={len(chunk_result.edges)}",
+                        refresh=False,
                     )
+                    pbar.update(1)
+        finally:
+            pbar.close()

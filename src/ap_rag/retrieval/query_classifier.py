@@ -13,6 +13,7 @@ from typing import Any
 from tenacity import retry, stop_after_attempt, wait_exponential
 
 from ap_rag.models.taxonomy import QueryType
+from ap_rag.openai_compat import max_tokens_kwarg, reasoning_kwarg, sampling_kwargs
 
 logger = logging.getLogger(__name__)
 
@@ -68,8 +69,9 @@ class QueryClassifier:
                 {"role": "system", "content": _SYSTEM_PROMPT},
                 {"role": "user", "content": query},
             ],
-            temperature=0.0,
-            max_tokens=10,
+            **sampling_kwargs(self._model, temperature=0.0),
+            **max_tokens_kwarg(self._model, 10),
+            **reasoning_kwarg(self._model),
         )
         return (response.choices[0].message.content or "").strip().upper()
 

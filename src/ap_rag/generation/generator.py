@@ -12,6 +12,7 @@ from typing import Any
 
 from tenacity import retry, stop_after_attempt, wait_exponential
 
+from ap_rag.openai_compat import reasoning_kwarg, sampling_kwargs
 from ap_rag.retrieval.context_builder import RetrievalContext
 
 logger = logging.getLogger(__name__)
@@ -25,18 +26,24 @@ You are a precise question-answering assistant. You will be given:
 Your task:
 - Answer the query based ONLY on the provided context.
 - If the answer cannot be determined from the context, say so explicitly.
-- Distinguish between what is claimed, what is supported by evidence, and what \
-  is assumed — use this structure in your answer when relevant.
-- Be concise but complete. Cite the relevant parts of the context in your answer.
+- Use the argumentative labels as internal hints to ground your reasoning, but \
+  write a natural prose answer. Do NOT echo the role tags (do not output \
+  "[CLAIM]", "[EVIDENCE]", "主張:", "根拠:", bullet scaffolds, etc.) in your answer.
+- Match the granularity of the question:
+    * Short factoid questions (e.g., "what datasets did they use?") → answer \
+      in a single short sentence or a short comma-separated list.
+    * WHY / HOW / reasoning questions → answer in 1-3 sentences that follow the \
+      reasoning chain, still as natural prose.
 - Answer in the same language as the query.
 """
 
 _USER_TEMPLATE = """\
+Context:
 {context_text}
 
-質問: {query}
+Question: {query}
 
-上記の参照情報に基づいて回答してください。
+Answer based only on the context above.
 """
 
 
@@ -97,7 +104,8 @@ class AnswerGenerator:
                     ),
                 },
             ],
-            temperature=0.1,
+            **sampling_kwargs(self._model, temperature=0.1),
+            **reasoning_kwarg(self._model),
         )
         answer = (response.choices[0].message.content or "").strip()
         logger.debug("回答生成完了: %d 文字", len(answer))

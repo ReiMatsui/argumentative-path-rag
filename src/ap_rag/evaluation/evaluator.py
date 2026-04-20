@@ -164,8 +164,10 @@ class Evaluator:
             try:
                 result = self._system.query(sample.question, sample.doc_id)
                 answer = result.answer
+                # AP-RAG の ArgumentNode は verbatim_text プロパティを持つ。
+                # Baseline (_TextNode) は text しか持たないので getattr で判定。
                 contexts = [
-                    node.text
+                    getattr(node, "verbatim_text", None) or node.text
                     for node in getattr(result.retrieval_context, "nodes", [])
                 ]
             except Exception as e:

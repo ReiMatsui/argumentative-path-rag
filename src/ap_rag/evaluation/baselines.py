@@ -17,6 +17,8 @@ from collections import Counter
 from dataclasses import dataclass
 from typing import Any
 
+from ap_rag.openai_compat import reasoning_kwarg, sampling_kwargs
+
 logger = logging.getLogger(__name__)
 
 
@@ -137,7 +139,8 @@ class BM25RAG:
                     "content": f"Context:\n{context_text}\n\nQuestion: {question}",
                 },
             ],
-            temperature=0.1,
+            **sampling_kwargs(self._model, temperature=0.1),
+            **reasoning_kwarg(self._model),
         )
         return (response.choices[0].message.content or "").strip()
 
@@ -255,7 +258,8 @@ class DenseRAG:
                     "content": f"Context:\n{context_text}\n\nQuestion: {question}",
                 },
             ],
-            temperature=0.1,
+            **sampling_kwargs(self._model, temperature=0.1),
+            **reasoning_kwarg(self._model),
         )
         return (response.choices[0].message.content or "").strip()
 

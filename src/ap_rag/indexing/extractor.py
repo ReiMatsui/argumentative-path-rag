@@ -15,45 +15,59 @@ from tenacity import retry, stop_after_attempt, wait_exponential
 
 from ap_rag.indexing.schemas import EdgeExtractionOutput
 from ap_rag.models.graph import ArgumentEdge, ArgumentNode
+from ap_rag.openai_compat import reasoning_kwarg, sampling_kwargs
 
 logger = logging.getLogger(__name__)
 
 # ── プロンプト定義 ─────────────────────────────────────────────────────────────
 
 _SYSTEM_PROMPT = """\
-You are an expert in argument analysis. Given a list of argumentative nodes, \
-identify the directed relationships between them.
+You are an expert in argument analysis. Given a list of argumentative nodes extracted \
+from the same document, identify the directed relationships between them.
 
 Edge type definitions and direction rules:
 
 - SUPPORTS   : (EVIDENCE/CONCLUSION) ──SUPPORTS──▶ (CLAIM)
                The source provides empirical or logical support for the target claim.
-               Example: "Inventory adjustments were the main factor" SUPPORTS "Q3 revenue fell 12%"
+               Example: "Measured outcomes improved by a clear margin across trials"
+                        SUPPORTS "The proposed method is effective."
 
 - CONTRADICTS: (CONTRAST) ──CONTRADICTS──▶ (CLAIM)
                The source challenges or refutes the target.
-               Example: "Competitor grew 8%" CONTRADICTS "Our sales declined"
+               Example: "Removing component X noticeably degrades performance"
+                        CONTRADICTS "Component X is not essential."
 
 - DERIVES    : (EVIDENCE) ──DERIVES──▶ (CONCLUSION)
-               The target conclusion is derived/inferred from the source evidence.
-               Example: "Semiconductor shortage caused stoppage" DERIVES "Shortage will continue next quarter"
+               The target conclusion is derived or inferred from the source evidence.
+               Example: "Outcomes drop sharply when condition A is absent"
+                        DERIVES "Condition A is critical for the outcome."
 
 - ASSUMES    : (CLAIM or CONCLUSION) ──ASSUMES──▶ (ASSUMPTION)
                The source claim/conclusion only holds if the target assumption is true.
                CRITICAL: source must be CLAIM or CONCLUSION; target must be ASSUMPTION.
-               Example: "Q3 revenue fell 12%" ASSUMES "Exchange rates were stable"
+               Example: "The result generalizes to new settings" ASSUMES
+                        "The sample is representative of those settings."
 
 - ILLUSTRATES: (EVIDENCE) ──ILLUSTRATES──▶ (CLAIM)
-               The source concretely illustrates or exemplifies the target.
+               The source is a concrete example or sample that illustrates the target.
+               Example: "The case study in Section 3 shows behavior B in practice"
+                        ILLUSTRATES "The system exhibits behavior B."
 
 - CONTRASTS  : (CONTRAST) ──CONTRASTS──▶ (CLAIM)
                The source presents a contrasting case relative to the target.
 
 Rules:
-1. Only output edges with confidence >= 0.7.
-2. Strictly follow the direction conventions above — especially for ASSUMES.
-3. Do not create edges between identical texts or self-loops (source_idx != target_idx).
-4. If there are no clear relationships, return an empty edges list.
+1. Each node is provided with an ``idx``, a ``type``, and two text fields:
+   ``text`` (short label) and ``source_span`` (verbatim original sentence). When
+   deciding relations, ground your reasoning in ``source_span`` to avoid being
+   misled by paraphrased labels.
+2. Only output edges with confidence >= 0.7.
+3. Strictly follow the direction conventions above — especially for ASSUMES.
+4. Do not create edges between identical texts or self-loops (source_idx != target_idx).
+5. Prefer recall over precision for within-same-topic pairs: if two nodes clearly
+   discuss the same subject, surface a SUPPORTS or DERIVES edge even if the
+   wording is indirect.
+6. If there are no clear relationships, return an empty edges list.
 """
 
 _USER_TEMPLATE = """\
@@ -92,7 +106,15 @@ class EdgeExtractor:
             return []
 
         nodes_json = json.dumps(
-            [{"idx": i, "type": n.node_type.value, "text": n.text} for i, n in enumerate(nodes)],
+            [
+                {
+                    "idx": i,
+                    "type": n.node_type.value,
+                    "text": n.text,
+                    "source_span": (n.source_span or n.text),
+                }
+                for i, n in enumerate(nodes)
+            ],
             ensure_ascii=False,
             indent=2,
         )
@@ -114,8 +136,9 @@ class EdgeExtractor:
                 {"role": "system", "content": _SYSTEM_PROMPT},
                 {"role": "user", "content": _USER_TEMPLATE.format(nodes_json=nodes_json)},
             ],
-            temperature=0.0,
             response_format=EdgeExtractionOutput,
+            **sampling_kwargs(self._model, temperature=0.0),
+            **reasoning_kwarg(self._model),
         )
         parsed = response.choices[0].message.parsed
         if parsed is None:
