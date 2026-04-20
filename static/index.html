@@ -1,0 +1,677 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Argumentative-Path RAG</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/cytoscape/3.28.1/cytoscape.min.js"></script>
+<style>
+/* ── Base ── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --bg:       #0f172a;
+  --surface:  #1e293b;
+  --card:     #273449;
+  --border:   #334155;
+  --text:     #f1f5f9;
+  --sub:      #94a3b8;
+  --accent:   #38bdf8;
+
+  --claim:      #3b82f6;
+  --evidence:   #22c55e;
+  --assumption: #f59e0b;
+  --conclusion: #a855f7;
+  --caveat:     #64748b;
+  --contrast:   #ef4444;
+  --definition: #06b6d4;
+}
+body { background: var(--bg); color: var(--text); font-family: 'Segoe UI', system-ui, sans-serif; height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
+
+/* ── Header ── */
+header { background: var(--surface); border-bottom: 1px solid var(--border); padding: 0 20px; height: 52px; display: flex; align-items: center; gap: 16px; flex-shrink: 0; }
+header h1 { font-size: 15px; font-weight: 700; color: var(--accent); letter-spacing: .02em; }
+header span { font-size: 12px; color: var(--sub); }
+#status-dot { width: 8px; height: 8px; border-radius: 50%; background: #22c55e; margin-left: auto; }
+#status-dot.offline { background: #ef4444; }
+
+/* ── Layout ── */
+.workspace { display: flex; flex: 1; overflow: hidden; }
+
+/* ── Sidebar ── */
+.sidebar { width: 340px; flex-shrink: 0; background: var(--surface); border-right: 1px solid var(--border); display: flex; flex-direction: column; overflow: hidden; }
+.sidebar-tabs { display: flex; border-bottom: 1px solid var(--border); }
+.tab-btn { flex: 1; padding: 10px 0; font-size: 12px; font-weight: 600; color: var(--sub); background: none; border: none; cursor: pointer; border-bottom: 2px solid transparent; transition: all .15s; }
+.tab-btn.active { color: var(--accent); border-bottom-color: var(--accent); }
+.tab-panel { display: none; flex: 1; overflow-y: auto; padding: 16px; }
+.tab-panel.active { display: flex; flex-direction: column; gap: 12px; }
+
+/* ── Form elements ── */
+label { font-size: 11px; font-weight: 600; color: var(--sub); text-transform: uppercase; letter-spacing: .05em; }
+textarea, input[type=text] { width: 100%; background: var(--card); border: 1px solid var(--border); border-radius: 6px; color: var(--text); font-size: 13px; padding: 8px 10px; resize: vertical; outline: none; transition: border-color .15s; }
+textarea:focus, input:focus { border-color: var(--accent); }
+textarea { min-height: 120px; font-family: monospace; line-height: 1.5; }
+.field { display: flex; flex-direction: column; gap: 5px; }
+
+/* ── Buttons ── */
+.btn { padding: 8px 14px; border-radius: 6px; font-size: 13px; font-weight: 600; cursor: pointer; border: none; transition: all .15s; }
+.btn-primary { background: var(--accent); color: #0f172a; }
+.btn-primary:hover { opacity: .9; }
+.btn-primary:disabled { background: var(--border); color: var(--sub); cursor: not-allowed; }
+.btn-ghost { background: var(--card); color: var(--text); border: 1px solid var(--border); }
+.btn-ghost:hover { border-color: var(--accent); color: var(--accent); }
+.btn-sm { padding: 5px 10px; font-size: 12px; }
+.btn-row { display: flex; gap: 8px; }
+
+/* ── Stats cards ── */
+.stats-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.stat-card { background: var(--card); border: 1px solid var(--border); border-radius: 6px; padding: 10px 12px; }
+.stat-card .num { font-size: 22px; font-weight: 700; color: var(--accent); }
+.stat-card .lbl { font-size: 11px; color: var(--sub); }
+
+/* ── Type breakdown ── */
+.type-list { display: flex; flex-direction: column; gap: 5px; }
+.type-row { display: flex; align-items: center; gap: 8px; font-size: 12px; }
+.type-dot { width: 10px; height: 10px; border-radius: 3px; flex-shrink: 0; }
+.type-row .cnt { margin-left: auto; font-weight: 600; color: var(--sub); }
+
+/* ── Query result ── */
+.result-box { background: var(--card); border: 1px solid var(--border); border-radius: 6px; padding: 12px; }
+.result-box .result-label { font-size: 10px; font-weight: 700; color: var(--sub); text-transform: uppercase; margin-bottom: 6px; }
+.result-box .result-text { font-size: 13px; line-height: 1.6; }
+.qt-badge { display: inline-block; padding: 2px 8px; border-radius: 20px; font-size: 11px; font-weight: 700; margin-bottom: 8px; }
+.compare-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.compare-card { background: var(--card); border: 1px solid var(--border); border-radius: 6px; padding: 10px; }
+.compare-card .compare-title { font-size: 10px; font-weight: 700; text-transform: uppercase; margin-bottom: 6px; }
+.compare-card .compare-body { font-size: 12px; line-height: 1.5; color: var(--sub); }
+
+/* ── Step list ── */
+.step-list { display: flex; flex-direction: column; gap: 6px; }
+.step-item { display: flex; align-items: center; gap: 8px; font-size: 12px; padding: 6px 10px; border-radius: 6px; background: var(--card); border: 1px solid var(--border); cursor: pointer; transition: border-color .15s; }
+.step-item:hover, .step-item.active { border-color: var(--accent); color: var(--accent); }
+.step-num { width: 20px; height: 20px; border-radius: 50%; background: var(--border); display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 700; flex-shrink: 0; }
+.step-item.active .step-num { background: var(--accent); color: #0f172a; }
+
+/* ── Loader ── */
+.loader { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--sub); }
+.spinner { width: 16px; height: 16px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin .7s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ── Main graph area ── */
+.graph-area { flex: 1; display: flex; flex-direction: column; overflow: hidden; position: relative; }
+#cy { flex: 1; }
+
+/* ── Graph controls ── */
+.graph-controls { position: absolute; top: 12px; right: 12px; display: flex; flex-direction: column; gap: 6px; z-index: 10; }
+.graph-controls button { background: var(--surface); border: 1px solid var(--border); color: var(--text); width: 32px; height: 32px; border-radius: 6px; cursor: pointer; font-size: 14px; display: flex; align-items: center; justify-content: center; transition: border-color .15s; }
+.graph-controls button:hover { border-color: var(--accent); color: var(--accent); }
+
+/* ── Legend ── */
+.legend { position: absolute; bottom: 12px; left: 12px; background: rgba(30,41,59,.92); border: 1px solid var(--border); border-radius: 8px; padding: 10px 14px; display: flex; flex-wrap: wrap; gap: 8px 14px; max-width: 480px; backdrop-filter: blur(4px); }
+.legend-item { display: flex; align-items: center; gap: 5px; font-size: 11px; }
+.legend-dot { width: 10px; height: 10px; border-radius: 3px; }
+
+/* ── Node tooltip ── */
+#node-tooltip { position: absolute; background: var(--surface); border: 1px solid var(--accent); border-radius: 8px; padding: 10px 14px; max-width: 280px; font-size: 12px; line-height: 1.5; pointer-events: none; display: none; z-index: 100; box-shadow: 0 8px 24px rgba(0,0,0,.4); }
+#node-tooltip .tt-type { font-size: 10px; font-weight: 700; text-transform: uppercase; margin-bottom: 4px; }
+#node-tooltip .tt-text { color: var(--sub); }
+
+/* ── Scrollbar ── */
+::-webkit-scrollbar { width: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+/* ── Animations ── */
+@keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+.fade-in { animation: fadeIn .25s ease; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>🧠 Argumentative-Path RAG</h1>
+  <span>Argument Graph Visualizer</span>
+  <div id="status-dot" title="API接続状態"></div>
+</header>
+
+<div class="workspace">
+
+  <!-- ── Sidebar ── -->
+  <aside class="sidebar">
+    <div class="sidebar-tabs">
+      <button class="tab-btn active" onclick="switchTab('index')">インデックス</button>
+      <button class="tab-btn" onclick="switchTab('query')">クエリ</button>
+      <button class="tab-btn" onclick="switchTab('trace')">探索トレース</button>
+    </div>
+
+    <!-- Index Tab -->
+    <div id="tab-index" class="tab-panel active">
+      <div class="field">
+        <label>文書テキスト</label>
+        <textarea id="doc-text" placeholder="文書を貼り付けるか、デモを読み込んでください…"></textarea>
+      </div>
+      <div class="field">
+        <label>文書ID</label>
+        <input type="text" id="doc-id" value="demo">
+      </div>
+      <div class="btn-row">
+        <button class="btn btn-primary" id="btn-index" onclick="indexDocument()" style="flex:1">グラフ構築</button>
+        <button class="btn btn-ghost btn-sm" onclick="loadDemo()">デモ文書</button>
+      </div>
+      <div id="index-status"></div>
+      <div id="index-stats" style="display:none">
+        <div class="stats-row">
+          <div class="stat-card"><div class="num" id="stat-nodes">—</div><div class="lbl">ノード数</div></div>
+          <div class="stat-card"><div class="num" id="stat-edges">—</div><div class="lbl">エッジ数</div></div>
+        </div>
+        <div style="margin-top:10px">
+          <label style="display:block;margin-bottom:6px">ノードタイプ内訳</label>
+          <div class="type-list" id="type-breakdown"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Query Tab -->
+    <div id="tab-query" class="tab-panel">
+      <div class="field">
+        <label>質問</label>
+        <textarea id="query-text" rows="3" placeholder="質問を入力してください…"></textarea>
+      </div>
+      <button class="btn btn-primary" id="btn-query" onclick="runQuery()" style="width:100%">クエリ実行</button>
+      <div id="query-status"></div>
+      <div id="query-result" style="display:none" class="fade-in">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+          <label>クエリ型</label>
+          <span id="qt-badge" class="qt-badge">—</span>
+        </div>
+        <div class="result-box">
+          <div class="result-label">ArgumentativeRAG 回答</div>
+          <div class="result-text" id="ap-answer"></div>
+        </div>
+        <div style="margin-top:10px">
+          <label style="display:block;margin-bottom:6px">BM25 との比較</label>
+          <div class="result-box" style="border-color:var(--border)">
+            <div class="result-label" style="color:#f59e0b">BM25RAG 回答</div>
+            <div class="result-text" id="bm25-answer" style="color:var(--sub)"></div>
+          </div>
+        </div>
+        <div style="margin-top:10px">
+          <label style="display:block;margin-bottom:6px">取得チャンク（BM25）</label>
+          <div id="bm25-chunks" style="display:flex;flex-direction:column;gap:5px;font-size:11px;color:var(--sub);max-height:120px;overflow-y:auto;"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Trace Tab -->
+    <div id="tab-trace" class="tab-panel">
+      <div id="trace-empty" style="color:var(--sub);font-size:13px;">クエリを実行すると探索経路が表示されます。</div>
+      <div id="trace-content" style="display:none" class="fade-in">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+          <label>BFS 探索ステップ</label>
+          <button class="btn btn-ghost btn-sm" onclick="playAnimation()">▶ 再生</button>
+        </div>
+        <div class="step-list" id="step-list"></div>
+        <div style="margin-top:12px">
+          <button class="btn btn-ghost btn-sm" onclick="resetHighlights()" style="width:100%">ハイライトをリセット</button>
+        </div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- ── Graph area ── -->
+  <main class="graph-area">
+    <div id="cy"></div>
+
+    <!-- Graph controls -->
+    <div class="graph-controls">
+      <button onclick="cy && cy.fit()" title="全体表示">⊕</button>
+      <button onclick="cy && cy.zoom(cy.zoom()*1.3)" title="拡大">+</button>
+      <button onclick="cy && cy.zoom(cy.zoom()/1.3)" title="縮小">−</button>
+      <button onclick="toggleLayout()" title="レイアウト切替">⟳</button>
+    </div>
+
+    <!-- Legend -->
+    <div class="legend">
+      <div class="legend-item"><div class="legend-dot" style="background:var(--claim)"></div>CLAIM</div>
+      <div class="legend-item"><div class="legend-dot" style="background:var(--evidence)"></div>EVIDENCE</div>
+      <div class="legend-item"><div class="legend-dot" style="background:var(--assumption)"></div>ASSUMPTION</div>
+      <div class="legend-item"><div class="legend-dot" style="background:var(--conclusion)"></div>CONCLUSION</div>
+      <div class="legend-item"><div class="legend-dot" style="background:var(--caveat)"></div>CAVEAT</div>
+      <div class="legend-item"><div class="legend-dot" style="background:var(--contrast)"></div>CONTRAST</div>
+      <div class="legend-item"><div class="legend-dot" style="background:var(--definition)"></div>DEFINITION</div>
+    </div>
+
+    <!-- Node tooltip -->
+    <div id="node-tooltip">
+      <div class="tt-type" id="tt-type"></div>
+      <div class="tt-text" id="tt-text"></div>
+    </div>
+  </main>
+</div>
+
+<script>
+// ── 定数 ──────────────────────────────────────────────────────────────────────
+
+const NODE_COLORS = {
+  CLAIM:      '#3b82f6',
+  EVIDENCE:   '#22c55e',
+  ASSUMPTION: '#f59e0b',
+  CONCLUSION: '#a855f7',
+  CAVEAT:     '#64748b',
+  CONTRAST:   '#ef4444',
+  DEFINITION: '#06b6d4',
+};
+
+const QT_COLORS = {
+  WHY:        '#3b82f6',
+  WHAT:       '#22c55e',
+  HOW:        '#06b6d4',
+  EVIDENCE:   '#f59e0b',
+  ASSUMPTION: '#a855f7',
+};
+
+const DEMO_TEXT = `当社のQ3売上は前年比12%減少した。
+この減少の主要因は電子部品の在庫調整である。
+具体的には、半導体不足により製品の生産ラインが停止を余儀なくされた。
+なお、為替レートは本四半期を通じて安定していたため、為替影響は軽微であった。
+一方、競合X社は同期間に売上を8%伸ばしており、当社との差は拡大している。
+この半導体不足は業界全体の構造的問題であり、来四半期も継続する見通しである。
+また、コスト削減のため製造拠点の見直しを検討中であり、早ければ来四半期末までに決定する。`;
+
+// ── State ─────────────────────────────────────────────────────────────────────
+
+let cy = null;
+let currentDocId = 'demo';
+let traversalSteps = [];
+let layouts = ['fcose', 'breadthfirst'];
+let layoutIdx = 0;
+
+// ── Cytoscape 初期化 ──────────────────────────────────────────────────────────
+
+function initCytoscape() {
+  cy = cytoscape({
+    container: document.getElementById('cy'),
+    style: [
+      {
+        selector: 'node',
+        style: {
+          'background-color': (ele) => NODE_COLORS[ele.data('type')] || '#64748b',
+          'label': (ele) => {
+            const t = ele.data('text') || '';
+            return t.length > 28 ? t.slice(0, 28) + '…' : t;
+          },
+          'font-size': '10px',
+          'color': '#f1f5f9',
+          'text-valign': 'bottom',
+          'text-halign': 'center',
+          'text-margin-y': '4px',
+          'text-outline-width': '2px',
+          'text-outline-color': '#0f172a',
+          'width': '28px',
+          'height': '28px',
+          'border-width': '2px',
+          'border-color': (ele) => NODE_COLORS[ele.data('type')] || '#64748b',
+          'border-opacity': 0.6,
+          'transition-property': 'background-color, border-color, width, height, opacity',
+          'transition-duration': '0.25s',
+        }
+      },
+      {
+        selector: 'edge',
+        style: {
+          'width': (ele) => 1 + (ele.data('confidence') || 0.8) * 2,
+          'line-color': '#475569',
+          'target-arrow-color': '#475569',
+          'target-arrow-shape': 'triangle',
+          'curve-style': 'bezier',
+          'label': (ele) => ele.data('label') || '',
+          'font-size': '8px',
+          'color': '#64748b',
+          'text-rotation': 'autorotate',
+          'text-outline-width': '2px',
+          'text-outline-color': '#0f172a',
+          'transition-property': 'line-color, target-arrow-color, width, opacity',
+          'transition-duration': '0.25s',
+        }
+      },
+      { selector: '.highlighted', style: { 'background-color': '#facc15', 'border-color': '#facc15', 'border-width': '3px', 'width': '36px', 'height': '36px' } },
+      { selector: '.entry-node', style: { 'background-color': '#f97316', 'border-color': '#f97316', 'border-width': '3px', 'width': '36px', 'height': '36px' } },
+      { selector: '.retrieved', style: { 'background-color': '#22c55e', 'border-color': '#22c55e', 'border-width': '3px', 'width': '32px', 'height': '32px' } },
+      { selector: '.dimmed', style: { 'opacity': 0.2 } },
+      { selector: 'edge.highlighted', style: { 'line-color': '#facc15', 'target-arrow-color': '#facc15', 'width': 3 } },
+      { selector: 'edge.retrieved', style: { 'line-color': '#22c55e', 'target-arrow-color': '#22c55e', 'width': 2.5 } },
+    ],
+    layout: { name: 'grid' },
+    minZoom: 0.1,
+    maxZoom: 4,
+  });
+
+  // ── ノードホバー → ツールチップ ──
+  const tooltip = document.getElementById('node-tooltip');
+  cy.on('mouseover', 'node', (evt) => {
+    const node = evt.target;
+    const pos = evt.renderedPosition;
+    document.getElementById('tt-type').textContent = node.data('type');
+    document.getElementById('tt-type').style.color = NODE_COLORS[node.data('type')] || '#fff';
+    document.getElementById('tt-text').textContent = node.data('text') || '';
+    tooltip.style.display = 'block';
+    tooltip.style.left = (pos.x + 16) + 'px';
+    tooltip.style.top  = (pos.y - 10) + 'px';
+  });
+  cy.on('mouseout', 'node', () => { tooltip.style.display = 'none'; });
+  cy.on('tap', 'node', (evt) => {
+    const node = evt.target;
+    // クリックしたノードの情報をクエリパネルに表示
+    document.getElementById('tt-type').textContent = node.data('type');
+    document.getElementById('tt-type').style.color = NODE_COLORS[node.data('type')] || '#fff';
+    document.getElementById('tt-text').textContent = node.data('text') || '';
+    tooltip.style.display = 'block';
+    setTimeout(() => { tooltip.style.display = 'none'; }, 4000);
+  });
+  cy.on('tap', (evt) => {
+    if (evt.target === cy) tooltip.style.display = 'none';
+  });
+}
+
+// ── タブ切り替え ──────────────────────────────────────────────────────────────
+
+function switchTab(name) {
+  document.querySelectorAll('.tab-btn').forEach((b, i) => {
+    const names = ['index', 'query', 'trace'];
+    b.classList.toggle('active', names[i] === name);
+  });
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+  document.getElementById('tab-' + name).classList.add('active');
+}
+
+// ── デモ文書読み込み ───────────────────────────────────────────────────────────
+
+function loadDemo() {
+  document.getElementById('doc-text').value = DEMO_TEXT;
+  document.getElementById('doc-id').value = 'demo';
+}
+
+// ── インデックス ──────────────────────────────────────────────────────────────
+
+async function indexDocument() {
+  const text = document.getElementById('doc-text').value.trim();
+  const docId = document.getElementById('doc-id').value.trim() || 'demo';
+  if (!text) { alert('文書テキストを入力してください'); return; }
+
+  currentDocId = docId;
+  const btn = document.getElementById('btn-index');
+  btn.disabled = true;
+  document.getElementById('index-stats').style.display = 'none';
+  setStatus('index-status', 'loading', 'グラフを構築中（数十秒かかります）…');
+
+  try {
+    const res = await fetch('/api/index', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ text, doc_id: docId }),
+    });
+    if (!res.ok) { const e = await res.json(); throw new Error(e.detail || 'エラー'); }
+    const data = await res.json();
+
+    setStatus('index-status', 'ok', `✓ 完了（${data.num_nodes} ノード / ${data.num_edges} エッジ）`);
+    document.getElementById('stat-nodes').textContent = data.num_nodes;
+    document.getElementById('stat-edges').textContent = data.num_edges;
+    document.getElementById('index-stats').style.display = 'block';
+
+    // タイプ内訳
+    renderTypeBreakdown(data.nodes_by_type);
+
+    // グラフ読み込み
+    await loadGraph(docId);
+
+  } catch (e) {
+    setStatus('index-status', 'error', '✗ ' + e.message);
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+function renderTypeBreakdown(nodesByType) {
+  const container = document.getElementById('type-breakdown');
+  container.innerHTML = '';
+  const entries = Object.entries(nodesByType).filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1]);
+  entries.forEach(([type, cnt]) => {
+    const row = document.createElement('div');
+    row.className = 'type-row';
+    row.innerHTML = `
+      <div class="type-dot" style="background:${NODE_COLORS[type] || '#64748b'}"></div>
+      <span>${type}</span>
+      <span class="cnt">${cnt}</span>`;
+    container.appendChild(row);
+  });
+}
+
+// ── グラフ読み込み ────────────────────────────────────────────────────────────
+
+async function loadGraph(docId) {
+  const res = await fetch('/api/graph/' + docId);
+  if (!res.ok) return;
+  const data = await res.json();
+
+  cy.elements().remove();
+
+  const elements = [
+    ...data.nodes.map(n => ({ group: 'nodes', data: n.data })),
+    ...data.edges.map(e => ({ group: 'edges', data: e.data })),
+  ];
+  cy.add(elements);
+
+  runLayout();
+}
+
+function runLayout() {
+  const name = layouts[layoutIdx % layouts.length];
+  const options = name === 'fcose'
+    ? { name: 'fcose', quality: 'default', randomize: true, animate: true, animationDuration: 600, nodeRepulsion: 8000, idealEdgeLength: 80, edgeElasticity: 0.45, nestingFactor: 0.1, gravity: 0.25, numIter: 2500, tile: true, tilingPaddingVertical: 10, tilingPaddingHorizontal: 10 }
+    : { name: 'breadthfirst', directed: true, animate: true, animationDuration: 600, padding: 30 };
+
+  // fcose が利用できない場合は cose にフォールバック
+  try {
+    cy.layout(options).run();
+  } catch {
+    cy.layout({ name: 'cose', animate: true, animationDuration: 600 }).run();
+  }
+  setTimeout(() => cy.fit(undefined, 40), 800);
+}
+
+function toggleLayout() {
+  layoutIdx++;
+  runLayout();
+}
+
+// ── クエリ実行 ────────────────────────────────────────────────────────────────
+
+async function runQuery() {
+  const question = document.getElementById('query-text').value.trim();
+  if (!question) { alert('質問を入力してください'); return; }
+
+  const btn = document.getElementById('btn-query');
+  btn.disabled = true;
+  document.getElementById('query-result').style.display = 'none';
+  setStatus('query-status', 'loading', 'クエリ実行中…');
+
+  try {
+    const res = await fetch('/api/query', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ question, doc_id: currentDocId }),
+    });
+    if (!res.ok) { const e = await res.json(); throw new Error(e.detail || 'エラー'); }
+    const data = await res.json();
+
+    setStatus('query-status', 'ok', `✓ クエリ型: ${data.query_type} / 取得: ${data.retrieved_node_ids.length} ノード`);
+
+    // クエリ結果表示
+    const badge = document.getElementById('qt-badge');
+    badge.textContent = data.query_type;
+    badge.style.background = (QT_COLORS[data.query_type] || '#64748b') + '33';
+    badge.style.color = QT_COLORS[data.query_type] || '#f1f5f9';
+    document.getElementById('ap-answer').textContent = data.answer;
+    document.getElementById('bm25-answer').textContent = data.bm25_answer || '（取得なし）';
+
+    // BM25 チャンク
+    const chunksEl = document.getElementById('bm25-chunks');
+    chunksEl.innerHTML = '';
+    (data.bm25_chunks || []).forEach((c, i) => {
+      const div = document.createElement('div');
+      div.style.cssText = 'padding:5px 8px;background:var(--card);border-radius:4px;border:1px solid var(--border)';
+      div.textContent = `[${i+1}] ${c.slice(0, 80)}${c.length > 80 ? '…' : ''}`;
+      chunksEl.appendChild(div);
+    });
+
+    document.getElementById('query-result').style.display = 'block';
+
+    // 探索トレース
+    traversalSteps = data.traversal_steps || [];
+    renderTraceTab(traversalSteps, data.retrieved_node_ids);
+
+    // グラフにハイライト適用
+    applyQueryHighlights(data);
+
+    switchTab('trace');
+
+  } catch (e) {
+    setStatus('query-status', 'error', '✗ ' + e.message);
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+// ── グラフハイライト ──────────────────────────────────────────────────────────
+
+function applyQueryHighlights(data) {
+  if (!cy) return;
+  resetHighlights();
+
+  // 全要素を薄く
+  cy.elements().addClass('dimmed');
+
+  // 取得ノードをハイライト
+  const retrievedIds = data.retrieved_node_ids || [];
+  retrievedIds.forEach(id => {
+    cy.$id(id).removeClass('dimmed').addClass('retrieved');
+  });
+
+  // 入口ノード（step 0）をオレンジ
+  if (traversalSteps.length > 0) {
+    traversalSteps[0].node_ids.forEach(id => {
+      cy.$id(id).removeClass('dimmed retrieved').addClass('entry-node');
+    });
+  }
+
+  // 取得ノード間のエッジを強調
+  cy.edges().filter(e =>
+    retrievedIds.includes(e.data('source')) &&
+    retrievedIds.includes(e.data('target'))
+  ).removeClass('dimmed').addClass('retrieved');
+}
+
+function highlightStep(step) {
+  if (!cy || !traversalSteps[step]) return;
+
+  // 前ステップのハイライトを解除
+  cy.nodes('.highlighted').removeClass('highlighted');
+
+  traversalSteps[step].node_ids.forEach(id => {
+    const node = cy.$id(id);
+    node.removeClass('dimmed').addClass('highlighted');
+    // 中心に近い位置へアニメーション（ズームしない）
+  });
+
+  // アクティブ表示
+  document.querySelectorAll('.step-item').forEach((el, i) => {
+    el.classList.toggle('active', i === step);
+  });
+}
+
+function resetHighlights() {
+  if (!cy) return;
+  cy.elements().removeClass('dimmed highlighted entry-node retrieved');
+  document.querySelectorAll('.step-item').forEach(el => el.classList.remove('active'));
+}
+
+// ── 探索トレースタブ ──────────────────────────────────────────────────────────
+
+function renderTraceTab(steps, retrievedIds) {
+  document.getElementById('trace-empty').style.display = 'none';
+  document.getElementById('trace-content').style.display = 'block';
+
+  const list = document.getElementById('step-list');
+  list.innerHTML = '';
+  steps.forEach((s, i) => {
+    const item = document.createElement('div');
+    item.className = 'step-item';
+    item.innerHTML = `<div class="step-num">${s.step}</div><span>${s.label}</span><span style="margin-left:auto;color:var(--sub);font-size:11px">${s.node_ids.length}件</span>`;
+    item.onclick = () => highlightStep(i);
+    list.appendChild(item);
+  });
+
+  // 取得ノード数サマリ
+  const summary = document.createElement('div');
+  summary.style.cssText = 'margin-top:10px;padding:8px 10px;background:var(--card);border-radius:6px;border:1px solid var(--border);font-size:12px;';
+  summary.innerHTML = `<span style="color:var(--sub)">最終取得ノード数: </span><strong style="color:#22c55e">${retrievedIds.length}</strong>`;
+  list.appendChild(summary);
+}
+
+async function playAnimation() {
+  resetHighlights();
+  cy.elements().addClass('dimmed');
+  for (let i = 0; i < traversalSteps.length; i++) {
+    highlightStep(i);
+    await sleep(700);
+  }
+}
+
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+// ── ステータス表示 ────────────────────────────────────────────────────────────
+
+function setStatus(elId, type, msg) {
+  const el = document.getElementById(elId);
+  const colors = { loading: 'var(--sub)', ok: '#22c55e', error: '#ef4444' };
+  el.style.color = colors[type] || 'var(--sub)';
+  el.style.fontSize = '12px';
+  el.style.marginTop = '4px';
+  if (type === 'loading') {
+    el.innerHTML = `<div class="loader"><div class="spinner"></div>${msg}</div>`;
+  } else {
+    el.textContent = msg;
+  }
+}
+
+// ── ステータス確認 ────────────────────────────────────────────────────────────
+
+async function checkStatus() {
+  try {
+    const res = await fetch('/api/status');
+    const data = await res.json();
+    const dot = document.getElementById('status-dot');
+    dot.classList.toggle('offline', !data.api_key_set);
+    dot.title = data.api_key_set ? 'API Key: 設定済み' : 'API Key: 未設定';
+  } catch {
+    document.getElementById('status-dot').classList.add('offline');
+  }
+}
+
+// ── 初期化 ────────────────────────────────────────────────────────────────────
+
+document.addEventListener('DOMContentLoaded', () => {
+  initCytoscape();
+  checkStatus();
+  loadDemo();  // デモ文書をデフォルトでセット
+
+  // fcose レイアウトを動的ロード（利用できない場合は cose にフォールバック済み）
+  const s = document.createElement('script');
+  s.src = 'https://cdn.jsdelivr.net/npm/cytoscape-fcose@2.2.0/cytoscape-fcose.min.js';
+  s.onload = () => {
+    try { cytoscape.use(cytoscapeFcose); } catch {}
+  };
+  document.head.appendChild(s);
+});
+</script>
+</body>
+</html>
