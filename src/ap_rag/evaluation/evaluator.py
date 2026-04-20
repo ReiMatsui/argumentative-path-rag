@@ -21,6 +21,7 @@ from ap_rag.evaluation.metrics import (
     aggregate_results,
     compute_consistency,
     compute_em,
+    compute_evidence_f1,
     compute_f1,
 )
 
@@ -62,11 +63,13 @@ class Evaluator:
         judge: LLMJudge | None = None,
         show_progress: bool = True,
         consistency_runs: int = 1,
+        include_per_sample: bool = False,
     ) -> None:
         self._system = system
         self._judge = judge
         self._show_progress = show_progress
         self._consistency_runs = max(1, consistency_runs)
+        self._include_per_sample = include_per_sample
 
     def evaluate(
         self,
@@ -88,6 +91,7 @@ class Evaluator:
         hallucination_flags: list[bool] = []
         answer_correctness_scores: list[float] = []
         consistency_scores: list[float] = []
+        evidence_f1_scores: list[float | None] = []
         completed_samples: list[EvaluationSample] = []
 
         run_judge = use_judge and self._judge is not None
@@ -112,12 +116,20 @@ class Evaluator:
                 )
                 em_scores.append(compute_em(result_sample.predicted_answer, sample.ground_truth))
                 f1_scores.append(compute_f1(result_sample.predicted_answer, sample.ground_truth))
+                evidence_f1_scores.append(
+                    compute_evidence_f1(
+                        result_sample.retrieved_contexts,
+                        sample.gold_evidence,
+                    )
+                )
                 completed_samples.append(result_sample)
 
                 if run_consistency and len(all_answers) >= 2:
                     consistency_scores.append(compute_consistency(all_answers))
 
                 progress.advance(task)
+
+        has_any_evidence = any(s is not None for s in evidence_f1_scores)
 
         return aggregate_results(
             samples=completed_samples,
@@ -127,6 +139,8 @@ class Evaluator:
             hallucination_flags=hallucination_flags if hallucination_flags else None,
             answer_correctness_scores=answer_correctness_scores if answer_correctness_scores else None,
             consistency_scores=consistency_scores if consistency_scores else None,
+            evidence_f1_scores=evidence_f1_scores if has_any_evidence else None,
+            include_per_sample=self._include_per_sample,
         )
 
     def _evaluate_one(

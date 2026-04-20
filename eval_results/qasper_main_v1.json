@@ -1,0 +1,74 @@
+{
+  "config": {
+    "num_papers": 3,
+    "num_questions": 5,
+    "use_judge": true,
+    "use_dense": true,
+    "use_cross_chunk": false,
+    "embedding_backend": "openai",
+    "openai_embedding_model": "text-embedding-3-small",
+    "consistency_runs": 1
+  },
+  "results": {
+    "ArgumentativeRAG": {
+      "em": 0.0,
+      "f1": 0.06696428571428571,
+      "faithfulness": 0.9375,
+      "hallucination_rate": 0.0,
+      "citation_accuracy": null,
+      "answer_correctness": 0.4750000000000001,
+      "answer_consistency": null,
+      "evidence_f1": 0.3579822944741654,
+      "num_samples": 8,
+      "per_query_type": {
+        "WHAT": {
+          "em": 0.0,
+          "f1": 0.06696428571428571,
+          "count": 8,
+          "evidence_f1": 0.3579822944741654
+        }
+      },
+      "raw_scores": []
+    },
+    "BM25RAG": {
+      "em": 0.0,
+      "f1": 0.16875,
+      "faithfulness": 1.0,
+      "hallucination_rate": 0.125,
+      "citation_accuracy": null,
+      "answer_correctness": 0.5,
+      "answer_consistency": null,
+      "evidence_f1": 0.3848585469934935,
+      "num_samples": 8,
+      "per_query_type": {
+        "WHAT": {
+          "em": 0.0,
+          "f1": 0.16875,
+          "count": 8,
+          "evidence_f1": 0.3848585469934935
+        }
+      },
+      "raw_scores": []
+    },
+    "DenseRAG": {
+      "em": 0.0,
+      "f1": 0.17065580618212198,
+      "faithfulness": 1.0,
+      "hallucination_rate": 0.125,
+      "citation_accuracy": null,
+      "answer_correctness": 0.675,
+      "answer_consistency": null,
+      "evidence_f1": 0.46065880132678044,
+      "num_samples": 8,
+      "per_query_type": {
+        "WHAT": {
+          "em": 0.0,
+          "f1": 0.17065580618212198,
+          "count": 8,
+          "evidence_f1": 0.46065880132678044
+        }
+      },
+      "raw_scores": []
+    }
+  }
+}

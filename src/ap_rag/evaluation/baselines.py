@@ -172,14 +172,16 @@ class DenseRAG:
         embedding_model: str = "all-MiniLM-L6-v2",
         top_k: int = 5,
         device: str = "cpu",
+        encoder: Any | None = None,
     ) -> None:
         self._client = client
         self._model = model
         self._top_k = top_k
         self._device = device
         self._embedding_model_name = embedding_model
-        self._encoder: Any = None  # 遅延ロード
-        # doc_id → (chunks, embeddings)
+        # encoder が注入された場合は torch/sentence-transformers 依存を回避できる
+        self._encoder: Any = encoder
+        # doc_id → (chunks, embeddings) — embeddings は numpy.ndarray
         self._index: dict[str, tuple[list[str], Any]] = {}
 
     def _get_encoder(self) -> Any:
@@ -192,24 +194,44 @@ class DenseRAG:
         return self._encoder
 
     def index(self, texts: list[str], doc_id: str) -> None:
-        """文書テキストをエンコードしてインデックスする。"""
+        """文書テキストをエンコードしてインデックスする。
+
+        埋め込みは正規化済み numpy.ndarray として保持し、
+        検索時は内積 = コサイン類似度で順位付けする。
+        """
+        import numpy as np
+
         encoder = self._get_encoder()
-        embeddings = encoder.encode(texts, convert_to_tensor=True, show_progress_bar=False)
+        # 正規化まで encoder 側で済ませる（torch 依存を避ける）
+        embeddings = encoder.encode(
+            texts,
+            convert_to_numpy=True,
+            normalize_embeddings=True,
+            show_progress_bar=False,
+        )
+        embeddings = np.asarray(embeddings, dtype=np.float32)
         self._index[doc_id] = (texts, embeddings)
 
     def query(self, question: str, doc_id: str) -> BaselineResult:
         """コサイン類似度で検索し、LLMで回答を生成する。"""
+        import numpy as np
+
         if doc_id not in self._index:
             return self._empty_result()
 
         chunks, embeddings = self._index[doc_id]
         encoder = self._get_encoder()
 
-        import torch
-        query_emb = encoder.encode([question], convert_to_tensor=True, show_progress_bar=False)
-        # コサイン類似度
-        cos_scores = torch.nn.functional.cosine_similarity(query_emb, embeddings)
-        top_indices = cos_scores.argsort(descending=True)[: self._top_k].tolist()
+        query_emb = encoder.encode(
+            [question],
+            convert_to_numpy=True,
+            normalize_embeddings=True,
+            show_progress_bar=False,
+        )
+        query_emb = np.asarray(query_emb, dtype=np.float32).reshape(-1)
+        # embeddings は (N, D) で正規化済み → 内積がコサイン類似度
+        scores = embeddings @ query_emb
+        top_indices = np.argsort(-scores)[: self._top_k].tolist()
         top_chunks = [chunks[i] for i in top_indices]
 
         answer = self._generate(question, top_chunks)

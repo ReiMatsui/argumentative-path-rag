@@ -15,7 +15,7 @@ QASPER データセット:
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 from ap_rag.evaluation.metrics import EvaluationSample
@@ -42,11 +42,22 @@ def infer_query_type(question: str) -> str:
 
 @dataclass
 class QASPERSample:
-    """QASPER の1サンプル。"""
+    """QASPER の1サンプル。
+
+    Attributes:
+        paper_id: 論文ID。
+        question: 質問文。
+        answer: 正解回答文字列。
+        full_text: 論文全文。
+        evidence: gold evidence スパンのリスト。QASPER 公式の Evidence-F1
+            （取得された evidence と gold evidence の token-F1）の計算に使う。
+            Unanswerable 質問や空アノテーションの場合は空リスト。
+    """
     paper_id: str
     question: str
     answer: str
     full_text: str
+    evidence: list[str] = field(default_factory=list)
 
 
 class QASPERLoader:
@@ -105,11 +116,15 @@ class QASPERLoader:
                 if not answer:
                     continue
 
+                # gold evidence スパンをアノテーター横断で集める
+                evidence = self._extract_evidence(qa)
+
                 samples.append(QASPERSample(
                     paper_id=paper_id,
                     question=question,
                     answer=answer,
                     full_text=full_text,
+                    evidence=evidence,
                 ))
 
             paper_count += 1
@@ -202,6 +217,61 @@ class QASPERLoader:
                 return yes_no
 
         return ""
+
+    @staticmethod
+    def _extract_evidence(qa: dict) -> list[str]:
+        """QAエントリから gold evidence スパンのリストを抽出する。
+
+        QASPER のアノテーションは複数アノテーターを持つ。各アノテーターは
+        `evidence` フィールドに本文抜粋のリストを持つ。ここでは全アノテーターの
+        evidence を結合し、重複除去したリストを返す。
+
+        `answers` は以下の2形式がある（`_extract_answer` と同じ）:
+          - レコードリスト: [{"answer": {...}, ...}]
+          - 列指向 dict:   {"answer": [{"evidence": ...}], ...}
+
+        `evidence` 自体も次の形のどちらかになりうる:
+          - list[str]     : スパン文字列のリスト
+          - dict          : {"evidence": [...]} のようなラッパ（稀）
+        """
+        raw_answers = qa.get("answers", [])
+
+        if isinstance(raw_answers, dict):
+            answer_dicts = raw_answers.get("answer", [])
+            answer_records = [{"answer": a} for a in answer_dicts]
+        else:
+            answer_records = list(raw_answers)
+
+        collected: list[str] = []
+        seen: set[str] = set()
+
+        for answer_data in answer_records:
+            answer = answer_data.get("answer", {})
+            if not isinstance(answer, dict):
+                continue
+
+            raw_evidence = answer.get("evidence") or answer.get("highlighted_evidence") or []
+            if isinstance(raw_evidence, dict):
+                # まれにネストした dict の場合
+                raw_evidence = raw_evidence.get("evidence", [])
+
+            if not isinstance(raw_evidence, (list, tuple)):
+                continue
+
+            for span in raw_evidence:
+                if not isinstance(span, str):
+                    continue
+                span = span.strip()
+                if not span:
+                    continue
+                # "FLOAT SELECTED: ..." のような表マーカーはスキップ
+                # （QASPER 公式 evaluator は除外しないが、text-F1 では雑音）
+                if span in seen:
+                    continue
+                seen.add(span)
+                collected.append(span)
+
+        return collected
 
 
 class QASPERRunner:

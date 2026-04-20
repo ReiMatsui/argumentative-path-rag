@@ -30,6 +30,8 @@ class EvaluationSample:
         retrieved_contexts: 検索で取得されたコンテキスト文字列のリスト。
         doc_id: 参照文書ID。
         query_type: クエリ型（WHY/WHAT/HOW/EVIDENCE/ASSUMPTION）。
+        gold_evidence: gold evidence スパンのリスト（QASPER 公式の
+            Evidence-F1 計算用）。利用できないベンチマークでは空のまま。
         metadata: 任意の追加情報。
     """
 
@@ -39,6 +41,7 @@ class EvaluationSample:
     retrieved_contexts: list[str]
     doc_id: str
     query_type: str = "UNKNOWN"
+    gold_evidence: list[str] = field(default_factory=list)
     metadata: dict[str, Any] = field(default_factory=dict)
 
 
@@ -53,9 +56,12 @@ class EvaluationResult:
     citation_accuracy: float | None   # 引用精度
     answer_correctness: float | None  # LLM判定による回答正解度（0-1）
     answer_consistency: float | None  # 回答の一貫性（0-1、高いほど安定）
+    evidence_f1: float | None         # QASPER Evidence-F1（取得 vs gold evidence, 0-1）
     num_samples: int
     per_query_type: dict[str, dict[str, float]] = field(default_factory=dict)
     raw_scores: list[dict[str, Any]] = field(default_factory=list)
+    # サンプルごとの予測・取得ダンプ（GO/NO-GO 分析用。省略可）
+    per_sample: list[dict[str, Any]] = field(default_factory=list)
 
 
 # ── EM / F1 ───────────────────────────────────────────────────────────────────
@@ -93,6 +99,55 @@ def compute_f1(prediction: str, ground_truth: str) -> float:
     recall = len(common) / len(gt_tokens)
     f1 = 2 * precision * recall / (precision + recall)
     return f1
+
+
+def compute_evidence_f1(
+    retrieved_contexts: list[str],
+    gold_evidence: list[str],
+) -> float | None:
+    """QASPER 公式の Evidence-F1 を簡易計算する（0.0〜1.0）。
+
+    研究計画書 v6 §4.3 — 新規貢献②「長距離議論依存の接続」の中心指標。
+    取得された文脈群と gold evidence をそれぞれ結合して正規化トークン集合の
+    F1 を取る。QASPER 公式 evaluator は span-level の match を使うが、
+    本実装はチャンク/ノード単位で取得する本手法と揃えるため token-F1 を採用する
+    （標準 RAG 評価と整合する）。
+
+    Args:
+        retrieved_contexts: RAG が取得した文脈文字列のリスト。
+        gold_evidence: QASPER の gold evidence スパンのリスト。
+
+    Returns:
+        - token-F1（0.0〜1.0）。
+        - gold_evidence が空のサンプル（unanswerable など）は None を返す。
+          集計側で除外することで、unanswerable を評価不能として扱う。
+    """
+    if not gold_evidence:
+        return None
+
+    retrieved_joined = " ".join(retrieved_contexts)
+    gold_joined = " ".join(gold_evidence)
+
+    pred_tokens = normalize_answer(retrieved_joined).split()
+    gold_tokens = normalize_answer(gold_joined).split()
+
+    if not gold_tokens:
+        return None
+    if not pred_tokens:
+        return 0.0
+
+    # マルチセット共通部分 (min(count_pred, count_gold)) をカウント
+    # — 同じトークンが何度も出る長文での recall/precision を正しく扱うため
+    from collections import Counter
+    pred_counts = Counter(pred_tokens)
+    gold_counts = Counter(gold_tokens)
+    common = sum((pred_counts & gold_counts).values())
+    if common == 0:
+        return 0.0
+
+    precision = common / len(pred_tokens)
+    recall = common / len(gold_tokens)
+    return 2 * precision * recall / (precision + recall)
 
 
 # ── LLM-as-judge ──────────────────────────────────────────────────────────────
@@ -283,8 +338,16 @@ def aggregate_results(
     hallucination_flags: list[bool] | None = None,
     answer_correctness_scores: list[float] | None = None,
     consistency_scores: list[float] | None = None,
+    evidence_f1_scores: list[float | None] | None = None,
+    include_per_sample: bool = False,
 ) -> EvaluationResult:
-    """個別スコアを集計して EvaluationResult を返す。"""
+    """個別スコアを集計して EvaluationResult を返す。
+
+    Args:
+        evidence_f1_scores: サンプルごとの Evidence-F1（gold evidence がない
+            サンプルは None を含めて長さを samples と揃える）。集計では None を
+            除外し、残りサンプルでの平均を取る。
+    """
     n = len(samples)
     avg_em = sum(em_scores) / n if n > 0 else 0.0
     avg_f1 = sum(f1_scores) / n if n > 0 else 0.0
@@ -304,18 +367,24 @@ def aggregate_results(
     per_type: dict[str, dict[str, list[float]]] = {}
     for i, sample in enumerate(samples):
         qt = sample.query_type
-        per_type.setdefault(qt, {"em": [], "f1": []})
+        per_type.setdefault(qt, {"em": [], "f1": [], "evidence_f1": []})
         per_type[qt]["em"].append(em_scores[i])
         per_type[qt]["f1"].append(f1_scores[i])
+        if evidence_f1_scores is not None and i < len(evidence_f1_scores):
+            ef = evidence_f1_scores[i]
+            if ef is not None:
+                per_type[qt]["evidence_f1"].append(ef)
 
-    per_query_type = {
-        qt: {
+    per_query_type = {}
+    for qt, v in per_type.items():
+        entry: dict[str, float] = {
             "em": sum(v["em"]) / len(v["em"]),
             "f1": sum(v["f1"]) / len(v["f1"]),
             "count": len(v["em"]),
         }
-        for qt, v in per_type.items()
-    }
+        if v["evidence_f1"]:
+            entry["evidence_f1"] = sum(v["evidence_f1"]) / len(v["evidence_f1"])
+        per_query_type[qt] = entry
 
     avg_correctness = (
         sum(answer_correctness_scores) / len(answer_correctness_scores)
@@ -329,6 +398,32 @@ def aggregate_results(
         else None
     )
 
+    avg_evidence_f1: float | None = None
+    if evidence_f1_scores is not None:
+        valid = [s for s in evidence_f1_scores if s is not None]
+        if valid:
+            avg_evidence_f1 = sum(valid) / len(valid)
+
+    per_sample_dump: list[dict[str, Any]] = []
+    if include_per_sample:
+        for i, s in enumerate(samples):
+            per_sample_dump.append({
+                "question": s.question,
+                "query_type": s.query_type,
+                "doc_id": s.doc_id,
+                "ground_truth": s.ground_truth,
+                "predicted": s.predicted_answer,
+                "retrieved_contexts": s.retrieved_contexts,
+                "gold_evidence": s.gold_evidence,
+                "em": em_scores[i] if i < len(em_scores) else None,
+                "f1": f1_scores[i] if i < len(f1_scores) else None,
+                "evidence_f1": (
+                    evidence_f1_scores[i]
+                    if evidence_f1_scores is not None and i < len(evidence_f1_scores)
+                    else None
+                ),
+            })
+
     return EvaluationResult(
         em=avg_em,
         f1=avg_f1,
@@ -337,6 +432,8 @@ def aggregate_results(
         citation_accuracy=None,  # MMDocRAG で計測（フェーズ2）
         answer_correctness=avg_correctness,
         answer_consistency=avg_consistency,
+        evidence_f1=avg_evidence_f1,
         num_samples=n,
         per_query_type=per_query_type,
+        per_sample=per_sample_dump,
     )

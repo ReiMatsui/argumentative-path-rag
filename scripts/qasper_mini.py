@@ -110,6 +110,7 @@ def load_qasper_samples(num_papers: int, num_questions: int, client=None):
             retrieved_contexts=[],
             doc_id=raw.paper_id,
             query_type=_classify(raw.question),
+            gold_evidence=raw.evidence,
         ))
 
     console.print(
@@ -134,8 +135,16 @@ def build_and_index_argumentative_rag(
     embedding_model: str,
     embedding_device: str,
     use_cross_chunk: bool = False,
+    shared_encoder=None,
 ):
-    """ArgumentativeRAGPipeline を構築し、全論文をインデックスする。"""
+    """ArgumentativeRAGPipeline を構築し、全論文をインデックスする。
+
+    Args:
+        shared_encoder: 指定された場合、EmbeddingNodeSelector と
+            CrossChunkEdgeExtractor の両方にこの encoder を注入し、
+            sentence-transformers / torch の遅延ロードを完全にスキップする
+            （`OpenAIEncoder` など SentenceTransformer 互換アダプタに対応）。
+    """
     from ap_rag.graph.networkx_store import NetworkXGraphStore
     from ap_rag.indexing.chunker import SentenceChunker
     from ap_rag.indexing.classifier import NodeClassifier
@@ -154,6 +163,7 @@ def build_and_index_argumentative_rag(
         model_name=embedding_model,
         device=embedding_device,
         top_k=10,
+        encoder=shared_encoder,
     )
 
     edge_extractor = EdgeExtractor(client=client, model="gpt-4o-mini")
@@ -163,10 +173,10 @@ def build_and_index_argumentative_rag(
             f"  [dim]チャンク間エッジ抽出: 有効 (model={embedding_model})[/]"
         )
         # node_selector と同じ encoder を共有してモデルを二重ロードしない
-        shared_encoder = node_selector.get_encoder()
+        encoder_for_cross = shared_encoder or node_selector.get_encoder()
         cross_chunk = CrossChunkEdgeExtractor(
             edge_extractor=edge_extractor,
-            encoder=shared_encoder,
+            encoder=encoder_for_cross,
             embedding_model=embedding_model,
             device=embedding_device,
             top_k=5,
@@ -239,8 +249,13 @@ def build_and_index_dense(
     raw_by_paper: dict[str, str],
     embedding_model: str,
     embedding_device: str,
+    shared_encoder=None,
 ):
-    """DenseRAG（埋め込み検索）を構築し、論文テキストをインデックスする。"""
+    """DenseRAG（埋め込み検索）を構築し、論文テキストをインデックスする。
+
+    ``shared_encoder`` を渡すと sentence-transformers の遅延ロードを
+    スキップし、同一 encoder で入口選定側とチャンク埋め込みを共有できる。
+    """
     from ap_rag.evaluation.baselines import DenseRAG
     from ap_rag.indexing.chunker import SentenceChunker
 
@@ -252,6 +267,7 @@ def build_and_index_dense(
         top_k=5,
         embedding_model=embedding_model,
         device=embedding_device,
+        encoder=shared_encoder,
     )
     chunker = SentenceChunker()
     total_chunks = 0
@@ -275,6 +291,7 @@ def run_evaluation(
     use_judge: bool,
     label: str,
     consistency_runs: int = 1,
+    include_per_sample: bool = False,
 ):
     from ap_rag.evaluation.evaluator import Evaluator
     console.print(f"[bold]評価中: {label}[/]")
@@ -283,6 +300,7 @@ def run_evaluation(
         judge=judge,
         show_progress=True,
         consistency_runs=consistency_runs,
+        include_per_sample=include_per_sample,
     )
     return evaluator.evaluate(samples, use_judge=use_judge)
 
@@ -296,6 +314,9 @@ def print_comparison(results: dict, use_judge: bool) -> None:
     show_consistency = any(
         r.answer_consistency is not None for r in results.values()
     )
+    show_evidence_f1 = any(
+        getattr(r, "evidence_f1", None) is not None for r in results.values()
+    )
 
     # 全体比較
     table = Table(
@@ -307,6 +328,8 @@ def print_comparison(results: dict, use_judge: bool) -> None:
     table.add_column("システム", style="bold", width=22)
     table.add_column("EM", justify="right", width=8)
     table.add_column("F1", justify="right", width=8)
+    if show_evidence_f1:
+        table.add_column("Evidence-F1↑", justify="right", width=14)
     if use_judge:
         table.add_column("Correctness↑", justify="right", width=14)
         table.add_column("Faithfulness↑", justify="right", width=14)
@@ -317,6 +340,9 @@ def print_comparison(results: dict, use_judge: bool) -> None:
 
     for name, result in results.items():
         row = [name, f"{result.em:.3f}", f"{result.f1:.3f}"]
+        if show_evidence_f1:
+            ef1 = getattr(result, "evidence_f1", None)
+            row.append(f"{ef1:.3f}" if ef1 is not None else "—")
         if use_judge:
             row.append(
                 f"{result.answer_correctness:.3f}"
@@ -406,6 +432,17 @@ def print_summary(results: dict, use_judge: bool) -> None:
                 f"Hallucination 削減 {hall_delta:+.3f}"
             )
 
+        # Evidence-F1 差分（研究計画書 v6 §4.3 新規貢献② の中心指標）
+        ap_ef = getattr(ap, "evidence_f1", None)
+        bl_ef = getattr(bl, "evidence_f1", None)
+        if ap_ef is not None and bl_ef is not None:
+            ef_delta = ap_ef - bl_ef
+            sign = "+" if ef_delta >= 0 else ""
+            console.print(
+                f"  [magenta]vs {bl_name}:[/] Evidence-F1 差 {sign}{ef_delta:.3f} "
+                f"(AP={ap_ef:.3f} / {bl_name}={bl_ef:.3f})"
+            )
+
     # 一貫性の比較
     if ap.answer_consistency is not None:
         line_parts = [f"AP-RAG {ap.answer_consistency:.3f}"]
@@ -430,18 +467,31 @@ def main(
     dense_model: str,
     consistency_runs: int,
     use_cross_chunk: bool,
+    embedding_backend: str = "sentence-transformers",
+    openai_embedding_model: str = "text-embedding-3-small",
+    save_json: str | None = None,
 ) -> None:
     consistency_note = (
         f" / Consistency: {consistency_runs}×" if consistency_runs >= 2 else ""
     )
     cross_chunk_note = " / Cross-chunk: ON" if use_cross_chunk else ""
+    backend_note = (
+        f" / Backend: {openai_embedding_model}"
+        if embedding_backend == "openai"
+        else ""
+    )
+    selector_label = (
+        openai_embedding_model
+        if embedding_backend == "openai"
+        else embedding_model.split('/')[-1]
+    )
     console.print(Panel.fit(
         "[bold cyan]QASPER ミニ評価 — Argumentative-Path RAG[/]\n"
         f"[dim]論文 {num_papers} 件 × 各 {num_questions} 問 / "
         f"LLM-as-Judge: {'有効' if use_judge else 'スキップ'} / "
         f"Dense: {'有効' if use_dense else 'スキップ'} / "
-        f"入口選定: {embedding_model.split('/')[-1]}"
-        f"{cross_chunk_note}{consistency_note}[/]",
+        f"入口選定: {selector_label}"
+        f"{backend_note}{cross_chunk_note}{consistency_note}[/]",
         border_style="cyan",
     ))
 
@@ -463,12 +513,32 @@ def main(
         console.print("[red]❌ サンプルが0件です。ネットワーク接続を確認してください。[/]")
         sys.exit(1)
 
+    # ── Step 1.5: 共有 encoder のセットアップ（OpenAI バックエンド時） ───────
+    # 同じ encoder を AP-RAG の入口選定・CrossChunk・DenseRAG の3箇所で使い回し、
+    # API 呼び出しをキャッシュ性良く扱う。
+    shared_encoder = None
+    if embedding_backend == "openai":
+        from ap_rag.retrieval.openai_encoder import OpenAIEncoder
+        shared_encoder = OpenAIEncoder(
+            client=client,
+            model=openai_embedding_model,
+        )
+        # モデル名表示用: 研究計画書上の E5-Mistral 等とは別軸なので
+        # 下流の CrossChunk ログなどには分かりやすいラベルを入れておく
+        embedding_model_label = f"openai:{openai_embedding_model}"
+        console.print(
+            f"  [dim]共有 encoder: OpenAI {openai_embedding_model}[/]"
+        )
+    else:
+        embedding_model_label = embedding_model
+
     # ── Step 2: インデックス構築 ──────────────────────────────────────────────
     console.print(Rule("[bold]Step 2: インデックス構築[/]"))
     console.print("[bold]ArgumentativeRAG:[/]")
     ap_rag = build_and_index_argumentative_rag(
-        client, raw_by_paper, embedding_model, embedding_device,
+        client, raw_by_paper, embedding_model_label, embedding_device,
         use_cross_chunk=use_cross_chunk,
+        shared_encoder=shared_encoder,
     )
 
     console.print("[bold]BM25RAG:[/]")
@@ -477,8 +547,14 @@ def main(
     dense_rag = None
     if use_dense:
         console.print("[bold]DenseRAG:[/]")
+        # DenseRAG は OpenAI 共有 encoder をそのまま使う（sentence-transformers
+        # の重依存を避けるため）。--embedding-backend が sentence-transformers
+        # の場合のみ dense_model を自分でロードする。
         dense_rag = build_and_index_dense(
-            client, raw_by_paper, dense_model, embedding_device
+            client, raw_by_paper,
+            embedding_model_label if embedding_backend == "openai" else dense_model,
+            embedding_device,
+            shared_encoder=shared_encoder,
         )
 
     # ── Step 3: LLM-as-Judge セットアップ ────────────────────────────────────
@@ -489,25 +565,62 @@ def main(
         console.print("\n[cyan]LLM-as-Judge:[/] 有効\n")
 
     # ── Step 4: 評価実行 ──────────────────────────────────────────────────────
+    # --save-json を指定されたときだけ per-sample 記録を保持する
+    # （数百件スケールでもメモリが気になるレベルではないが、既定は off）
+    include_per_sample = bool(save_json)
+
     console.print(Rule("[bold]Step 3: 評価実行[/]"))
     results: dict = {}
     results["ArgumentativeRAG"] = run_evaluation(
         ap_rag, samples, judge, use_judge, "ArgumentativeRAG",
         consistency_runs=consistency_runs,
+        include_per_sample=include_per_sample,
     )
     results["BM25RAG"] = run_evaluation(
         bm25_rag, samples, judge, use_judge, "BM25RAG",
         consistency_runs=consistency_runs,
+        include_per_sample=include_per_sample,
     )
     if dense_rag is not None:
         results["DenseRAG"] = run_evaluation(
             dense_rag, samples, judge, use_judge, "DenseRAG",
             consistency_runs=consistency_runs,
+            include_per_sample=include_per_sample,
         )
 
     # ── Step 5: 結果表示 ──────────────────────────────────────────────────────
     print_comparison(results, use_judge)
     print_summary(results, use_judge)
+
+    # ── Step 6: JSON 保存 (任意) ──────────────────────────────────────────────
+    if save_json:
+        import json
+        from dataclasses import asdict
+        dumped = {
+            name: {
+                **asdict(result),
+                # EvaluationResult には raw_scores が含まれる場合あり → 除外
+            }
+            for name, result in results.items()
+        }
+        with open(save_json, "w", encoding="utf-8") as f:
+            json.dump(
+                {
+                    "config": {
+                        "num_papers": num_papers,
+                        "num_questions": num_questions,
+                        "use_judge": use_judge,
+                        "use_dense": use_dense,
+                        "use_cross_chunk": use_cross_chunk,
+                        "embedding_backend": embedding_backend,
+                        "openai_embedding_model": openai_embedding_model,
+                        "consistency_runs": consistency_runs,
+                    },
+                    "results": dumped,
+                },
+                f, ensure_ascii=False, indent=2,
+            )
+        console.print(f"[bold cyan]📄 結果を保存: {save_json}[/]")
 
 
 if __name__ == "__main__":
@@ -550,6 +663,35 @@ if __name__ == "__main__":
         action="store_true",
         help="チャンク境界をまたぐエッジ抽出を有効化（精度↑・埋め込み計算と LLM コスト↑）。",
     )
+    parser.add_argument(
+        "--embedding-backend",
+        type=str,
+        default="sentence-transformers",
+        choices=["sentence-transformers", "openai"],
+        help=(
+            "埋め込みバックエンド。"
+            "'sentence-transformers' は --embedding-model / --dense-model の "
+            "HuggingFace モデルを device にロード（既定）。"
+            "'openai' は OpenAI Embeddings API を共有 encoder として "
+            "AP-RAG / DenseRAG / CrossChunk すべてに注入する。M1 MacBook など "
+            "torch を避けたい環境で推奨。"
+        ),
+    )
+    parser.add_argument(
+        "--openai-embedding-model",
+        type=str,
+        default="text-embedding-3-small",
+        help=(
+            "--embedding-backend openai のとき使う OpenAI Embeddings モデル。"
+            "既定: text-embedding-3-small (1536 dim)。"
+        ),
+    )
+    parser.add_argument(
+        "--save-json",
+        type=str,
+        default=None,
+        help="指定したパスに評価結果を JSON で保存する。GO/NO-GO レポート生成用。",
+    )
     args = parser.parse_args()
 
     if args.debug:
@@ -567,4 +709,7 @@ if __name__ == "__main__":
         dense_model=args.dense_model,
         consistency_runs=args.consistency_runs,
         use_cross_chunk=args.cross_chunk,
+        embedding_backend=args.embedding_backend,
+        openai_embedding_model=args.openai_embedding_model,
+        save_json=args.save_json,
     )

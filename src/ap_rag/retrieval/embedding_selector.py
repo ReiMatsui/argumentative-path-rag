@@ -75,6 +75,7 @@ class EmbeddingNodeSelector:
         device: str = "cpu",
         top_k: int = 10,
         batch_size: int = 32,
+        encoder: object | None = None,
     ) -> None:
         self._model_name = model_name
         self._device = device
@@ -83,7 +84,9 @@ class EmbeddingNodeSelector:
         self._is_e5_mistral = _is_e5_mistral(model_name)
 
         # 遅延ロード: 実際に使われるまでモデルをメモリに載せない
-        self._model: SentenceTransformer | None = None
+        # encoder が外部から提供された場合は遅延ロードをスキップする
+        # （例: OpenAIEncoder を注入して sentence-transformers + torch 依存を回避）
+        self._model: SentenceTransformer | None = encoder  # type: ignore[assignment]
 
         # node_id → 正規化済み embedding ベクトル のキャッシュ
         self._cache: dict[str, np.ndarray] = {}
