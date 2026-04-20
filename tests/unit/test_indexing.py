@@ -2,8 +2,7 @@
 
 from __future__ import annotations
 
-import json
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -11,8 +10,33 @@ from ap_rag.indexing.chunker import DocumentChunk, SentenceChunker
 from ap_rag.indexing.classifier import NodeClassifier
 from ap_rag.indexing.extractor import EdgeExtractor
 from ap_rag.indexing.pipeline import IndexingPipeline
+from ap_rag.indexing.schemas import (
+    EdgeExtractionOutput,
+    EdgeItem,
+    NodeClassificationOutput,
+    NodeItem,
+)
 from ap_rag.graph.store import GraphStore
 from ap_rag.models import ArgumentGraph, ArgumentNode, EdgeType, NodeType
+
+
+# ── モックヘルパー ─────────────────────────────────────────────────────────────
+
+def _make_parse_client(parsed_output) -> MagicMock:
+    """client.beta.chat.completions.parse() を返すモッククライアント。
+
+    parsed_output には NodeClassificationOutput / EdgeExtractionOutput を渡す。
+    None を渡すと refusal（parsed=None）のシミュレーションになる。
+    """
+    mock_message = MagicMock()
+    mock_message.parsed = parsed_output
+    mock_choice = MagicMock()
+    mock_choice.message = mock_message
+    mock_response = MagicMock()
+    mock_response.choices = [mock_choice]
+    mock_client = MagicMock()
+    mock_client.beta.chat.completions.parse.return_value = mock_response
+    return mock_client
 
 
 # ── SentenceChunker ───────────────────────────────────────────────────────────
@@ -29,9 +53,7 @@ class TestSentenceChunker:
         text = "Q3売上は12%減少した。競合X社は8%増加した。電子部品在庫調整が主因だ。"
         chunker = SentenceChunker(max_tokens=512)
         chunks = chunker.chunk(text, doc_id="doc_001")
-        # 全文が1チャンクにまとめられるか複数に分割されるかは max_tokens 次第
         assert len(chunks) >= 1
-        # 全テキストが失われていないことを確認
         combined = " ".join(c.text for c in chunks)
         assert "Q3売上" in combined
 
@@ -55,55 +77,62 @@ class TestNodeClassifier:
             char_end=50,
         )
 
-    def _make_mock_client(self, response_json: str) -> MagicMock:
-        """OpenAI クライアントのモックを生成する。"""
-        mock_choice = MagicMock()
-        mock_choice.message.content = response_json
-        mock_response = MagicMock()
-        mock_response.choices = [mock_choice]
-        mock_client = MagicMock()
-        mock_client.chat.completions.create.return_value = mock_response
-        return mock_client
-
     def test_normal_classification(self):
-        response = json.dumps([
-            {"node_type": "CLAIM", "text": "Q3売上は12%減少した。"},
-            {"node_type": "EVIDENCE", "text": "電子部品の在庫調整が主因である。"},
+        """正常系: 2ノードが返る。"""
+        output = NodeClassificationOutput(nodes=[
+            NodeItem(node_type=NodeType.CLAIM,    text="Q3売上は12%減少した。"),
+            NodeItem(node_type=NodeType.EVIDENCE, text="電子部品の在庫調整が主因である。"),
         ])
-        client = self._make_mock_client(response)
+        client = _make_parse_client(output)
         classifier = NodeClassifier(client=client, model="gpt-4o")
         nodes = classifier.classify(self._make_chunk())
         assert len(nodes) == 2
         assert nodes[0].node_type == NodeType.CLAIM
         assert nodes[1].node_type == NodeType.EVIDENCE
 
-    def test_dict_wrapper_response(self):
-        """LLM が {"nodes": [...]} 形式で返す場合のテスト。"""
-        response = json.dumps({"nodes": [
-            {"node_type": "CLAIM", "text": "売上が減少した。"},
-        ]})
-        client = self._make_mock_client(response)
-        classifier = NodeClassifier(client=client)
-        nodes = classifier.classify(self._make_chunk())
-        assert len(nodes) == 1
-
-    def test_invalid_node_type_is_skipped(self):
-        response = json.dumps([
-            {"node_type": "UNKNOWN_TYPE", "text": "何かテキスト。"},
-            {"node_type": "CLAIM", "text": "有効なノード。"},
-        ])
-        client = self._make_mock_client(response)
-        classifier = NodeClassifier(client=client)
-        nodes = classifier.classify(self._make_chunk())
-        # UNKNOWN_TYPE はスキップされ CLAIM だけ返る
-        assert len(nodes) == 1
-        assert nodes[0].node_type == NodeType.CLAIM
-
-    def test_malformed_json_returns_empty(self):
-        client = self._make_mock_client("これはJSONではない")
+    def test_empty_nodes_returns_empty(self):
+        """nodes が空の出力は空リストを返す。"""
+        output = NodeClassificationOutput(nodes=[])
+        client = _make_parse_client(output)
         classifier = NodeClassifier(client=client)
         nodes = classifier.classify(self._make_chunk())
         assert nodes == []
+
+    def test_refusal_returns_empty(self):
+        """API が refusal を返した場合（parsed=None）は空リストになる。"""
+        client = _make_parse_client(None)
+        classifier = NodeClassifier(client=client)
+        nodes = classifier.classify(self._make_chunk())
+        assert nodes == []
+
+    def test_blank_text_node_is_skipped(self):
+        """text が空白のノードはスキップされる。"""
+        output = NodeClassificationOutput(nodes=[
+            NodeItem(node_type=NodeType.CLAIM, text="   "),
+            NodeItem(node_type=NodeType.EVIDENCE, text="有効なノード。"),
+        ])
+        client = _make_parse_client(output)
+        classifier = NodeClassifier(client=client)
+        nodes = classifier.classify(self._make_chunk())
+        assert len(nodes) == 1
+        assert nodes[0].node_type == NodeType.EVIDENCE
+
+    def test_invalid_node_type_rejected_by_pydantic(self):
+        """NodeType 列挙値にない文字列は Pydantic がバリデーションエラーを出す。"""
+        from pydantic import ValidationError
+        with pytest.raises((ValidationError, ValueError)):
+            NodeItem(node_type="QUESTION", text="テスト")
+
+    def test_node_has_correct_doc_id(self):
+        """生成されたノードに chunk の doc_id が設定される。"""
+        output = NodeClassificationOutput(nodes=[
+            NodeItem(node_type=NodeType.CLAIM, text="主張テキスト。"),
+        ])
+        client = _make_parse_client(output)
+        classifier = NodeClassifier(client=client)
+        nodes = classifier.classify(self._make_chunk())
+        assert nodes[0].source_doc_id == "doc_001"
+        assert nodes[0].source_chunk_idx == 0
 
 
 # ── EdgeExtractor ─────────────────────────────────────────────────────────────
@@ -125,26 +154,18 @@ class TestEdgeExtractor:
             ),
         ]
 
-    def _make_mock_client(self, response_json: str) -> MagicMock:
-        mock_choice = MagicMock()
-        mock_choice.message.content = response_json
-        mock_response = MagicMock()
-        mock_response.choices = [mock_choice]
-        mock_client = MagicMock()
-        mock_client.chat.completions.create.return_value = mock_response
-        return mock_client
-
     def test_single_node_returns_empty(self):
+        """ノードが1件以下の場合はLLMを呼ばず空リストを返す。"""
         extractor = EdgeExtractor(client=MagicMock())
-        nodes = self._make_nodes()[:1]
-        assert extractor.extract(nodes) == []
+        assert extractor.extract(self._make_nodes()[:1]) == []
 
     def test_normal_extraction(self):
-        nodes = self._make_nodes()
-        response = json.dumps([
-            {"source_idx": 0, "target_idx": 1, "edge_type": "SUPPORTS", "confidence": 0.9}
+        """正常系: SUPPORTS エッジが1件返る。"""
+        output = EdgeExtractionOutput(edges=[
+            EdgeItem(source_idx=0, target_idx=1, edge_type=EdgeType.SUPPORTS, confidence=0.9),
         ])
-        client = self._make_mock_client(response)
+        client = _make_parse_client(output)
+        nodes = self._make_nodes()
         extractor = EdgeExtractor(client=client, min_confidence=0.7)
         edges = extractor.extract(nodes)
         assert len(edges) == 1
@@ -153,24 +174,47 @@ class TestEdgeExtractor:
         assert edges[0].target_id == nodes[1].id
 
     def test_low_confidence_edge_is_filtered(self):
-        nodes = self._make_nodes()
-        response = json.dumps([
-            {"source_idx": 0, "target_idx": 1, "edge_type": "SUPPORTS", "confidence": 0.5}
+        """min_confidence 未満のエッジは除外される。"""
+        output = EdgeExtractionOutput(edges=[
+            EdgeItem(source_idx=0, target_idx=1, edge_type=EdgeType.SUPPORTS, confidence=0.5),
         ])
-        client = self._make_mock_client(response)
+        client = _make_parse_client(output)
         extractor = EdgeExtractor(client=client, min_confidence=0.7)
-        edges = extractor.extract(nodes)
+        edges = extractor.extract(self._make_nodes())
         assert edges == []
 
     def test_self_loop_is_filtered(self):
-        nodes = self._make_nodes()
-        response = json.dumps([
-            {"source_idx": 0, "target_idx": 0, "edge_type": "SUPPORTS", "confidence": 0.95}
+        """自己ループ（source_idx == target_idx）は除外される。"""
+        output = EdgeExtractionOutput(edges=[
+            EdgeItem(source_idx=0, target_idx=0, edge_type=EdgeType.SUPPORTS, confidence=0.95),
         ])
-        client = self._make_mock_client(response)
+        client = _make_parse_client(output)
         extractor = EdgeExtractor(client=client)
-        edges = extractor.extract(nodes)
+        edges = extractor.extract(self._make_nodes())
         assert edges == []
+
+    def test_out_of_range_index_is_filtered(self):
+        """ノード数を超えたインデックスは除外される。"""
+        output = EdgeExtractionOutput(edges=[
+            EdgeItem(source_idx=0, target_idx=99, edge_type=EdgeType.SUPPORTS, confidence=0.9),
+        ])
+        client = _make_parse_client(output)
+        extractor = EdgeExtractor(client=client)
+        edges = extractor.extract(self._make_nodes())
+        assert edges == []
+
+    def test_refusal_returns_empty(self):
+        """API が refusal を返した場合（parsed=None）は空リストになる。"""
+        client = _make_parse_client(None)
+        extractor = EdgeExtractor(client=client)
+        edges = extractor.extract(self._make_nodes())
+        assert edges == []
+
+    def test_invalid_edge_type_rejected_by_pydantic(self):
+        """EdgeType 列挙値にない文字列は Pydantic が拒否する。"""
+        from pydantic import ValidationError
+        with pytest.raises((ValidationError, ValueError)):
+            EdgeItem(source_idx=0, target_idx=1, edge_type="UNKNOWN")
 
 
 # ── IndexingPipeline ──────────────────────────────────────────────────────────

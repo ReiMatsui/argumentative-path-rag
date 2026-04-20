@@ -1,21 +1,20 @@
 """
 LLM を使ったエッジ抽出モジュール。
 
-ノードのペアに対して、関係の有無と種別を判定する。
-コスト削減のため、チャンク内のノードペアのみを対象とする（局所エッジ）。
+OpenAI Structured Outputs を使い、EdgeType 列挙値以外を API レベルで排除する。
+JSON パースは不要。
 """
 
 from __future__ import annotations
 
 import json
 import logging
-from itertools import combinations
 from typing import Any
 
 from tenacity import retry, stop_after_attempt, wait_exponential
 
+from ap_rag.indexing.schemas import EdgeExtractionOutput
 from ap_rag.models.graph import ArgumentEdge, ArgumentNode
-from ap_rag.models.taxonomy import EdgeType
 
 logger = logging.getLogger(__name__)
 
@@ -41,11 +40,10 @@ Edge type definitions and direction rules:
 
 - ASSUMES    : (CLAIM or CONCLUSION) ──ASSUMES──▶ (ASSUMPTION)
                The source claim/conclusion only holds if the target assumption is true.
-               The source DEPENDS ON the target assumption as a hidden premise.
-               Example: "Q3 revenue fell 12%" ASSUMES "Exchange rates were stable (so FX is not the cause)"
                CRITICAL: source must be CLAIM or CONCLUSION; target must be ASSUMPTION.
+               Example: "Q3 revenue fell 12%" ASSUMES "Exchange rates were stable"
 
-- ILLUSTRATES: (visual/example node) ──ILLUSTRATES──▶ (CLAIM)
+- ILLUSTRATES: (EVIDENCE) ──ILLUSTRATES──▶ (CLAIM)
                The source concretely illustrates or exemplifies the target.
 
 - CONTRASTS  : (CONTRAST) ──CONTRASTS──▶ (CLAIM)
@@ -53,19 +51,9 @@ Edge type definitions and direction rules:
 
 Rules:
 1. Only output edges with confidence >= 0.7.
-2. Strictly follow the direction conventions above — especially for ASSUMES:
-   source = CLAIM or CONCLUSION, target = ASSUMPTION.
-3. Output ONLY a JSON object with a single key "edges" containing an array of objects.
-4. Each object must have keys: "source_idx", "target_idx", "edge_type", "confidence"
-   where idx refers to the 0-based index in the provided nodes list.
-5. If there are no clear relationships, output: {"edges": []}
-6. Do not create edges between identical texts.
-
-Required output format:
-{"edges": [
-  {"source_idx": 0, "target_idx": 2, "edge_type": "ASSUMES", "confidence": 0.85},
-  {"source_idx": 1, "target_idx": 0, "edge_type": "SUPPORTS", "confidence": 0.95}
-]}
+2. Strictly follow the direction conventions above — especially for ASSUMES.
+3. Do not create edges between identical texts or self-loops (source_idx != target_idx).
+4. If there are no clear relationships, return an empty edges list.
 """
 
 _USER_TEMPLATE = """\
@@ -81,7 +69,7 @@ class EdgeExtractor:
 
     Args:
         client: openai.OpenAI インスタンス。
-        model: 使用するモデル名。
+        model: 使用するモデル名（.env の OPENAI_CLASSIFIER_MODEL で切り替え可）。
         min_confidence: この値未満のエッジは除外する。
     """
 
@@ -99,12 +87,6 @@ class EdgeExtractor:
         """ノードリストからエッジを抽出する。
 
         ノードが2つ未満の場合は空リストを返す。
-
-        Args:
-            nodes: 同一チャンク内のノードリスト（順序は chunk_idx でソート済みを想定）。
-
-        Returns:
-            抽出された ArgumentEdge のリスト。
         """
         if len(nodes) < 2:
             return []
@@ -114,89 +96,61 @@ class EdgeExtractor:
             ensure_ascii=False,
             indent=2,
         )
-        raw = self._call_llm(nodes_json)
-        return self._parse_response(raw, nodes)
+        output = self._call_llm(nodes_json)
+        return self._to_edges(output, nodes)
 
-    # ── LLM呼び出し ───────────────────────────────────────────────────────────
+    # ── LLM 呼び出し ──────────────────────────────────────────────────────────
 
     @retry(
         stop=stop_after_attempt(3),
         wait=wait_exponential(multiplier=1, min=2, max=10),
         reraise=True,
     )
-    def _call_llm(self, nodes_json: str) -> str:
-        response = self._client.chat.completions.create(
+    def _call_llm(self, nodes_json: str) -> EdgeExtractionOutput:
+        """Structured Outputs で EdgeExtractionOutput を返す。"""
+        response = self._client.beta.chat.completions.parse(
             model=self._model,
             messages=[
                 {"role": "system", "content": _SYSTEM_PROMPT},
                 {"role": "user", "content": _USER_TEMPLATE.format(nodes_json=nodes_json)},
             ],
             temperature=0.0,
-            response_format={"type": "json_object"},
+            response_format=EdgeExtractionOutput,
         )
-        return response.choices[0].message.content or ""
+        parsed = response.choices[0].message.parsed
+        if parsed is None:
+            logger.warning("Structured Outputs: parsed が None（refusal の可能性）")
+            return EdgeExtractionOutput(edges=[])
+        return parsed
 
-    # ── レスポンス解析 ────────────────────────────────────────────────────────
+    # ── 変換 ──────────────────────────────────────────────────────────────────
 
-    def _parse_response(
+    def _to_edges(
         self,
-        raw: str,
+        output: EdgeExtractionOutput,
         nodes: list[ArgumentNode],
     ) -> list[ArgumentEdge]:
-        try:
-            data = json.loads(raw)
-        except json.JSONDecodeError:
-            logger.warning("EdgeExtractor: JSONデコード失敗 raw=%s...", raw[:200])
-            return []
-
-        # dictの場合: "edges"キーを優先し、なければ最初のlist値を使う
-        if isinstance(data, dict):
-            if "edges" in data:
-                data = data["edges"]
-            else:
-                list_values = [v for v in data.values() if isinstance(v, list)]
-                if list_values:
-                    data = list_values[0]
-                else:
-                    return []
-
-        if not isinstance(data, list):
-            return []
-
+        """EdgeExtractionOutput → ArgumentEdge のリストに変換する。"""
         edges: list[ArgumentEdge] = []
-        for item in data:
-            edge = self._item_to_edge(item, nodes)
-            if edge is not None:
-                edges.append(edge)
+        for item in output.edges:
+            src_idx, tgt_idx = item.source_idx, item.target_idx
+
+            if src_idx == tgt_idx:
+                continue
+            if not (0 <= src_idx < len(nodes) and 0 <= tgt_idx < len(nodes)):
+                logger.warning("範囲外インデックス: src=%d tgt=%d (nodes=%d)", src_idx, tgt_idx, len(nodes))
+                continue
+            if item.confidence < self._min_confidence:
+                continue
+
+            edges.append(
+                ArgumentEdge(
+                    edge_type=item.edge_type,
+                    source_id=nodes[src_idx].id,
+                    target_id=nodes[tgt_idx].id,
+                    confidence=item.confidence,
+                )
+            )
 
         logger.debug("エッジ抽出: %d 件", len(edges))
         return edges
-
-    def _item_to_edge(
-        self,
-        item: dict[str, Any],
-        nodes: list[ArgumentNode],
-    ) -> ArgumentEdge | None:
-        try:
-            src_idx = int(item["source_idx"])
-            tgt_idx = int(item["target_idx"])
-            confidence = float(item.get("confidence", 1.0))
-            edge_type = EdgeType(str(item["edge_type"]).upper())
-
-            if src_idx == tgt_idx:
-                return None
-            if not (0 <= src_idx < len(nodes) and 0 <= tgt_idx < len(nodes)):
-                logger.warning("範囲外インデックス: src=%d tgt=%d", src_idx, tgt_idx)
-                return None
-            if confidence < self._min_confidence:
-                return None
-
-            return ArgumentEdge(
-                edge_type=edge_type,
-                source_id=nodes[src_idx].id,
-                target_id=nodes[tgt_idx].id,
-                confidence=confidence,
-            )
-        except (KeyError, ValueError, IndexError) as e:
-            logger.warning("エッジ変換失敗: %s — item=%s", e, item)
-            return None
