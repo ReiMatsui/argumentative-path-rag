@@ -71,7 +71,14 @@ class QASPERLoader:
             ) from e
 
         logger.info("QASPER データセットをロード中 (split=%s)...", self._split)
-        dataset = load_dataset("allenai/qasper", split=self._split, trust_remote_code=True)
+        try:
+            # datasets 2.x: trust_remote_code が必要
+            dataset = load_dataset(
+                "allenai/qasper", split=self._split, trust_remote_code=True
+            )
+        except TypeError:
+            # datasets 3.x 以降: trust_remote_code 引数が廃止された場合
+            dataset = load_dataset("allenai/qasper", split=self._split)
 
         samples: list[QASPERSample] = []
         paper_count = 0
@@ -83,7 +90,12 @@ class QASPERLoader:
             paper_id = paper["id"]
             full_text = self._extract_full_text(paper)
 
-            for qa in paper.get("qas", []):
+            # datasets 2.x は qas が列指向 dict {"question": [...], "answers": [...]}
+            # datasets 1.x は qas がレコードリスト [{"question": ..., "answers": ...}, ...]
+            qas_raw = paper.get("qas", [])
+            qa_records = self._normalize_qas(qas_raw)
+
+            for qa in qa_records:
                 question = qa.get("question", "").strip()
                 if not question:
                     continue
@@ -104,6 +116,24 @@ class QASPERLoader:
 
         logger.info("QASPER ロード完了: %d 論文, %d サンプル", paper_count, len(samples))
         return samples
+
+    @staticmethod
+    def _normalize_qas(qas_raw) -> list[dict]:
+        """datasets バージョンによる qas 形式の差異を吸収する。
+
+        - 列指向 dict: {"question": [...], "answers": [...]} → レコードリストに変換
+        - レコードリスト: [{"question": ..., "answers": ...}] → そのまま返す
+        """
+        if isinstance(qas_raw, dict):
+            # 列指向 dict（datasets 2.x）
+            questions = qas_raw.get("question", [])
+            answers_list = qas_raw.get("answers", [])
+            return [
+                {"question": q, "answers": a}
+                for q, a in zip(questions, answers_list)
+            ]
+        # レコードリスト（datasets 1.x）またはその他
+        return list(qas_raw)
 
     @staticmethod
     def _extract_full_text(paper: dict) -> str:
@@ -133,18 +163,42 @@ class QASPERLoader:
 
     @staticmethod
     def _extract_answer(qa: dict) -> str:
-        """QAエントリから回答文字列を抽出する。"""
-        for answer_data in qa.get("answers", []):
-            answer = answer_data.get("answer", {})
+        """QAエントリから回答文字列を抽出する。
 
-            # Free-form answer
-            free_form = answer.get("free_form_answer", "").strip()
+        answers は以下の2形式がある:
+          - レコードリスト: [{"answer": {"free_form_answer": ..., ...}, ...}]
+          - 列指向 dict:   {"answer": [{"free_form_answer": ..., ...}], ...}
+        """
+        raw_answers = qa.get("answers", [])
+
+        # 列指向 dict の場合 → レコードリストに変換
+        if isinstance(raw_answers, dict):
+            answer_dicts = raw_answers.get("answer", [])
+            answer_records = [{"answer": a} for a in answer_dicts]
+        else:
+            answer_records = list(raw_answers)
+
+        for answer_data in answer_records:
+            answer = answer_data.get("answer", {})
+            if not isinstance(answer, dict):
+                continue
+
+            # 1) Free-form answer（最優先）
+            free_form = (answer.get("free_form_answer") or "").strip()
             if free_form and free_form.lower() not in ("yes", "no", "unanswerable"):
                 return free_form
 
-            # Yes/No answer
-            yes_no = answer.get("yes_no_answer", "").strip()
-            if yes_no in ("yes", "no", "YES", "NO"):
+            # 2) Extractive spans（本文抜き出し型）— QASPER で最も多い形式
+            spans = answer.get("extractive_spans") or []
+            if isinstance(spans, (list, tuple)) and spans:
+                # 複数スパンを連結して1つの回答文字列にする
+                joined = " ... ".join(s.strip() for s in spans if isinstance(s, str) and s.strip())
+                if joined:
+                    return joined
+
+            # 3) Yes/No answer
+            yes_no = (answer.get("yes_no_answer") or "").strip()
+            if yes_no.lower() in ("yes", "no"):
                 return yes_no
 
         return ""
