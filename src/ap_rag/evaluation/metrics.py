@@ -46,11 +46,12 @@ class EvaluationSample:
 class EvaluationResult:
     """評価結果のサマリ。"""
 
-    em: float                    # Exact Match
-    f1: float                    # Token-level F1
-    faithfulness: float | None   # RAGAS faithfulness（0-1）
+    em: float                         # Exact Match
+    f1: float                         # Token-level F1
+    faithfulness: float | None        # RAGAS faithfulness（0-1）
     hallucination_rate: float | None  # ハルシネーション率（0-1、低いほど良い）
     citation_accuracy: float | None   # 引用精度
+    answer_correctness: float | None  # LLM判定による回答正解度（0-1）
     num_samples: int
     per_query_type: dict[str, dict[str, float]] = field(default_factory=dict)
     raw_scores: list[dict[str, Any]] = field(default_factory=list)
@@ -131,6 +132,29 @@ Rate the faithfulness on a scale from 0.0 to 1.0:
 Reply with ONLY a decimal number between 0.0 and 1.0.
 """
 
+_ANSWER_CORRECTNESS_PROMPT = """\
+You are evaluating whether a predicted answer correctly addresses a question.
+
+Question: {question}
+
+Ground Truth Answer: {ground_truth}
+
+Predicted Answer: {predicted}
+
+Judge whether the predicted answer conveys the same key information as the ground truth.
+Be lenient with wording differences — focus on whether the core facts and meaning match.
+A partial answer that covers the main point but omits minor details should score around 0.5-0.7.
+
+Score from 0.0 to 1.0:
+- 1.0: Fully correct — all key information matches the ground truth
+- 0.7: Mostly correct — main point is right, minor details missing or slightly off
+- 0.5: Partially correct — some key information matches, some is missing or wrong
+- 0.2: Mostly incorrect — only superficially related to the ground truth
+- 0.0: Incorrect — wrong answer or completely unrelated
+
+Reply with ONLY a decimal number between 0.0 and 1.0.
+"""
+
 
 class LLMJudge:
     """LLM-as-judge によるハルシネーション率・忠実度の評価器。
@@ -180,7 +204,35 @@ class LLMJudge:
             score = float(raw)
             return max(0.0, min(1.0, score))
         except ValueError:
-            # 数値以外が返ってきた場合は 0.5 で中立にする
+            return 0.5
+
+    def answer_correctness_score(self, sample: EvaluationSample) -> float:
+        """LLM判定による回答正解度を返す（0.0〜1.0）。
+
+        F1 がテキストの完全一致を要求するのに対し、こちらは意味的な正しさを評価する。
+        言い換えや表現の違いを許容するため、グラフベース手法との相性が良い。
+
+        ground_truth が空の場合は評価不能として 0.0 を返す。
+        """
+        if not sample.ground_truth.strip():
+            return 0.0
+
+        prompt = _ANSWER_CORRECTNESS_PROMPT.format(
+            question=sample.question,
+            ground_truth=sample.ground_truth[:1000],
+            predicted=sample.predicted_answer[:1000],
+        )
+        response = self._client.chat.completions.create(
+            model=self._model,
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.0,
+            max_tokens=10,
+        )
+        raw = (response.choices[0].message.content or "").strip()
+        try:
+            score = float(raw)
+            return max(0.0, min(1.0, score))
+        except ValueError:
             return 0.5
 
 
@@ -192,6 +244,7 @@ def aggregate_results(
     f1_scores: list[float],
     faithfulness_scores: list[float] | None = None,
     hallucination_flags: list[bool] | None = None,
+    answer_correctness_scores: list[float] | None = None,
 ) -> EvaluationResult:
     """個別スコアを集計して EvaluationResult を返す。"""
     n = len(samples)
@@ -226,12 +279,19 @@ def aggregate_results(
         for qt, v in per_type.items()
     }
 
+    avg_correctness = (
+        sum(answer_correctness_scores) / len(answer_correctness_scores)
+        if answer_correctness_scores
+        else None
+    )
+
     return EvaluationResult(
         em=avg_em,
         f1=avg_f1,
         faithfulness=avg_faith,
         hallucination_rate=hallucination_rate,
         citation_accuracy=None,  # MMDocRAG で計測（フェーズ2）
+        answer_correctness=avg_correctness,
         num_samples=n,
         per_query_type=per_query_type,
     )

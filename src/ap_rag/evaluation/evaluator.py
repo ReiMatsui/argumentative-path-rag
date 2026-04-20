@@ -78,6 +78,7 @@ class Evaluator:
         f1_scores: list[float] = []
         faithfulness_scores: list[float] = []
         hallucination_flags: list[bool] = []
+        answer_correctness_scores: list[float] = []
         completed_samples: list[EvaluationSample] = []
 
         run_judge = use_judge and self._judge is not None
@@ -93,7 +94,11 @@ class Evaluator:
 
             for sample in samples:
                 result_sample = self._evaluate_one(
-                    sample, run_judge, faithfulness_scores, hallucination_flags
+                    sample,
+                    run_judge,
+                    faithfulness_scores,
+                    hallucination_flags,
+                    answer_correctness_scores,
                 )
                 em_scores.append(compute_em(result_sample.predicted_answer, sample.ground_truth))
                 f1_scores.append(compute_f1(result_sample.predicted_answer, sample.ground_truth))
@@ -106,6 +111,7 @@ class Evaluator:
             f1_scores=f1_scores,
             faithfulness_scores=faithfulness_scores if faithfulness_scores else None,
             hallucination_flags=hallucination_flags if hallucination_flags else None,
+            answer_correctness_scores=answer_correctness_scores if answer_correctness_scores else None,
         )
 
     def _evaluate_one(
@@ -114,6 +120,7 @@ class Evaluator:
         run_judge: bool,
         faithfulness_scores: list[float],
         hallucination_flags: list[bool],
+        answer_correctness_scores: list[float],
     ) -> EvaluationSample:
         """1サンプルを評価し、predicted_answer と retrieved_contexts を埋めたサンプルを返す。"""
         try:
@@ -142,6 +149,9 @@ class Evaluator:
             try:
                 faithfulness_scores.append(self._judge.faithfulness_score(completed))
                 hallucination_flags.append(self._judge.is_hallucination(completed))
+                answer_correctness_scores.append(
+                    self._judge.answer_correctness_score(completed)
+                )
             except Exception as e:
                 logger.warning("LLM judge 失敗: %s", e)
 

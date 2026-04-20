@@ -1,0 +1,662 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>クエリ型別 探索フロー</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: 'Segoe UI', 'Hiragino Sans', sans-serif;
+  background: #0d1018;
+  color: #dde1ec;
+  padding: 28px 20px;
+  min-height: 100vh;
+}
+
+h1 {
+  text-align: center;
+  font-size: 1.3rem;
+  color: #fff;
+  margin-bottom: 4px;
+  letter-spacing: 0.04em;
+}
+.subtitle {
+  text-align: center;
+  font-size: 0.8rem;
+  color: #666;
+  margin-bottom: 32px;
+}
+
+/* ── 凡例 ──────────────────────────────── */
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 18px;
+  justify-content: center;
+  margin-bottom: 28px;
+}
+.legend-item { display: flex; align-items: center; gap: 6px; font-size: 0.72rem; color: #888; }
+.legend-dot  { width: 10px; height: 10px; border-radius: 3px; flex-shrink: 0; }
+
+/* ── グリッド ─────────────────────────── */
+.grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  grid-template-rows: auto auto;
+  gap: 16px;
+  max-width: 1160px;
+  margin: 0 auto 20px;
+}
+/* WHY / WHAT / HOW が上段 3列、EVIDENCE / ASSUMPTION が下段中央2列 */
+.card-why        { grid-column: 1; }
+.card-what       { grid-column: 2; }
+.card-how        { grid-column: 3; }
+.card-evidence   { grid-column: 1 / 2; }
+.card-assumption { grid-column: 2 / 3; }
+.card-legend-box { grid-column: 3;     }
+
+/* ── カード共通 ──────────────────────── */
+.card {
+  background: #141720;
+  border-radius: 12px;
+  border: 1px solid #22263a;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ── カードヘッダ ─────────────────────── */
+.card-head {
+  padding: 14px 16px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.qtype-badge {
+  display: inline-block;
+  font-size: 0.65rem;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  padding: 2px 9px;
+  border-radius: 99px;
+  width: fit-content;
+  margin-bottom: 4px;
+}
+.card-title { font-size: 0.95rem; font-weight: 700; color: #fff; }
+.card-desc  { font-size: 0.73rem; color: #888; }
+.card-ex    {
+  margin-top: 6px;
+  background: #1c2030;
+  border-left: 3px solid #444;
+  border-radius: 4px;
+  padding: 5px 10px;
+  font-size: 0.72rem;
+  color: #aaa;
+  font-style: italic;
+}
+
+/* ── カード本体 ──────────────────────── */
+.card-body { padding: 14px 16px; display: flex; flex-direction: column; gap: 14px; flex: 1; }
+
+/* ── セクションタイトル ──────────────── */
+.sec-title {
+  font-size: 0.63rem;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: #555;
+  margin-bottom: 6px;
+}
+
+/* ── ノードバッジ ─────────────────────── */
+.node-badges { display: flex; flex-wrap: wrap; gap: 5px; }
+.nb {
+  font-size: 0.68rem;
+  font-weight: 700;
+  padding: 3px 9px;
+  border-radius: 6px;
+  letter-spacing: 0.04em;
+}
+.nb-claim      { background: #2d1f4a; color: #ce93d8; border: 1px solid #7b1fa2; }
+.nb-evidence   { background: #1b2d1b; color: #a5d6a7; border: 1px solid #388e3c; }
+.nb-assumption { background: #2d2010; color: #ffe082; border: 1px solid #f57f17; }
+.nb-conclusion { background: #162333; color: #90caf9; border: 1px solid #1565c0; }
+.nb-definition { background: #0d2626; color: #80cbc4; border: 1px solid #00695c; }
+.nb-caveat     { background: #1c2530; color: #b0bec5; border: 1px solid #455a64; }
+.nb-contrast   { background: #2d1515; color: #ef9a9a; border: 1px solid #b71c1c; }
+
+/* エッジバッジ */
+.eb {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.67rem;
+  padding: 2px 8px;
+  border-radius: 5px;
+  font-weight: 600;
+  margin: 2px 0;
+}
+.eb-supports    { background: #1a2d1a; color: #81c784; border: 1px solid #2e7d32; }
+.eb-derives     { background: #162233; color: #90caf9; border: 1px solid #1565c0; }
+.eb-assumes     { background: #2a1e0a; color: #ffcc80; border: 1px solid #e65100; }
+.dir-badge {
+  font-size: 0.58rem;
+  background: #222;
+  color: #777;
+  padding: 1px 5px;
+  border-radius: 3px;
+  letter-spacing: 0.05em;
+}
+
+/* ── 探索ツリー図 ─────────────────────── */
+.tree { display: flex; flex-direction: column; gap: 2px; }
+.tree-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+.depth-label {
+  font-size: 0.62rem;
+  color: #555;
+  font-weight: 700;
+  min-width: 50px;
+  padding-top: 4px;
+  letter-spacing: 0.04em;
+  flex-shrink: 0;
+}
+.tree-nodes { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+.tree-connector {
+  padding-left: 58px;
+  font-size: 0.72rem;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #444;
+  margin: 1px 0;
+}
+.arrow-up { font-size: 0.85rem; }
+
+/* 除外 */
+.exclude-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.68rem;
+  color: #666;
+  flex-wrap: wrap;
+}
+.ex-label { color: #555; font-size: 0.62rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; }
+
+/* 深度バッジ */
+.depth-badge {
+  display: inline-block;
+  background: #1c2030;
+  color: #667;
+  font-size: 0.65rem;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 5px;
+  letter-spacing: 0.04em;
+}
+
+/* ── 結果サマリ ──────────────────────── */
+.result-row {
+  background: #101418;
+  border: 1px solid #1e2330;
+  border-radius: 8px;
+  padding: 9px 12px;
+  font-size: 0.72rem;
+  color: #aaa;
+  line-height: 1.6;
+}
+.result-row strong { color: #ddd; }
+
+/* ── カラーテーマ（左ボーダー） ─────── */
+.card-why        { border-left: 3px solid #ab47bc; }
+.card-what       { border-left: 3px solid #42a5f5; }
+.card-how        { border-left: 3px solid #26a69a; }
+.card-evidence   { border-left: 3px solid #66bb6a; }
+.card-assumption { border-left: 3px solid #ffa726; }
+
+.qb-why        { background: #3b0f4a; color: #ce93d8; }
+.qb-what       { background: #0d2244; color: #90caf9; }
+.qb-how        { background: #0d2626; color: #80cbc4; }
+.qb-evidence   { background: #0f2a0f; color: #a5d6a7; }
+.qb-assumption { background: #2a1900; color: #ffe082; }
+
+.card-ex-why        { border-left-color: #ab47bc; }
+.card-ex-what       { border-left-color: #42a5f5; }
+.card-ex-how        { border-left-color: #26a69a; }
+.card-ex-evidence   { border-left-color: #66bb6a; }
+.card-ex-assumption { border-left-color: #ffa726; }
+
+/* ── 凡例ボックス ────────────────────── */
+.legend-box {
+  background: #141720;
+  border-radius: 12px;
+  border: 1px solid #22263a;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.legend-box h3 { font-size: 0.75rem; color: #666; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 4px; }
+.legend-grid { display: flex; flex-direction: column; gap: 5px; }
+.legend-entry { display: flex; align-items: center; gap: 8px; font-size: 0.7rem; color: #999; }
+</style>
+</head>
+<body>
+
+<h1>クエリ型別 探索フロー（改善後 v2）</h1>
+<p class="subtitle">クエリの意図に応じて、入口ノード・辿るエッジ・探索深度がそれぞれ異なる</p>
+
+<div class="grid">
+
+  <!-- ══════════════════════════════ WHY ══ -->
+  <div class="card card-why">
+    <div class="card-head">
+      <span class="qtype-badge qb-why">WHY</span>
+      <div class="card-title">因果・根拠を問う</div>
+      <div class="card-desc">「なぜXが起きたか」「なぜこの手法が有効か」</div>
+      <div class="card-ex card-ex-why">"Why does the model outperform baselines?"</div>
+    </div>
+    <div class="card-body">
+
+      <div>
+        <div class="sec-title">① BM25 入口選定</div>
+        <div class="node-badges">
+          <span class="nb nb-claim">CLAIM</span>
+          <span class="nb nb-conclusion">CONCLUSION</span>
+        </div>
+      </div>
+
+      <div>
+        <div class="sec-title">② グラフ探索ルール</div>
+        <div style="display:flex;flex-direction:column;gap:4px">
+          <div class="eb eb-supports"><span class="arrow-up">←</span> SUPPORTS <span class="dir-badge">incoming</span></div>
+          <div class="eb eb-derives"><span class="arrow-up">←</span> DERIVES <span class="dir-badge">incoming</span></div>
+          <div class="eb eb-assumes"><span class="arrow-up">→</span> ASSUMES <span class="dir-badge">outgoing</span></div>
+          <div style="margin-top:2px"><span class="depth-badge">MAX DEPTH: 3</span></div>
+        </div>
+      </div>
+
+      <div>
+        <div class="sec-title">③ 探索の広がり（BFS）</div>
+        <div class="tree">
+          <div class="tree-row">
+            <div class="depth-label">Depth 0</div>
+            <div class="tree-nodes">
+              <span class="nb nb-claim">CLAIM</span>
+              <span class="nb nb-conclusion">CONCLUSION</span>
+            </div>
+          </div>
+          <div class="tree-connector">
+            <span class="arrow-up" style="color:#81c784">↑SUPPORTS</span>
+            <span class="arrow-up" style="color:#90caf9">↑DERIVES</span>
+            <span class="arrow-up" style="color:#ffcc80">↓ASSUMES</span>
+          </div>
+          <div class="tree-row">
+            <div class="depth-label">Depth 1</div>
+            <div class="tree-nodes">
+              <span class="nb nb-evidence">EVIDENCE</span>
+              <span class="nb nb-assumption">ASSUMPTION</span>
+            </div>
+          </div>
+          <div class="tree-connector"><span class="arrow-up" style="color:#81c784">↑SUPPORTS</span></div>
+          <div class="tree-row">
+            <div class="depth-label">Depth 2–3</div>
+            <div class="tree-nodes">
+              <span class="nb nb-evidence">EVIDENCE</span>
+              <span class="nb nb-caveat">CAVEAT</span>
+            </div>
+          </div>
+        </div>
+        <div class="exclude-row" style="margin-top:8px">
+          <span class="ex-label">除外</span>
+          <span class="nb nb-contrast" style="font-size:0.63rem;padding:2px 7px">CONTRAST</span>
+        </div>
+      </div>
+
+      <div class="result-row">
+        <strong>取得される情報：</strong><br>
+        主張を裏付けるEVIDENCE、論理的に導かれる結論の根拠（DERIVES）、
+        前提条件（ASSUMPTION）まで深く収集。因果チェーンを完全に再現する。
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ═════════════════════════════ WHAT ══ -->
+  <div class="card card-what">
+    <div class="card-head">
+      <span class="qtype-badge qb-what">WHAT</span>
+      <div class="card-title">事実・定義・内容を問う</div>
+      <div class="card-desc">「Xとは何か」「何を使ったか」「何が得られたか」</div>
+      <div class="card-ex card-ex-what">"What features are used in the model?"</div>
+    </div>
+    <div class="card-body">
+
+      <div>
+        <div class="sec-title">① BM25 入口選定</div>
+        <div class="node-badges">
+          <span class="nb nb-claim">CLAIM</span>
+          <span class="nb nb-definition">DEFINITION</span>
+          <span class="nb nb-conclusion">CONCLUSION</span>
+        </div>
+      </div>
+
+      <div>
+        <div class="sec-title">② グラフ探索ルール</div>
+        <div style="display:flex;flex-direction:column;gap:4px">
+          <div class="eb eb-supports"><span class="arrow-up">←</span> SUPPORTS <span class="dir-badge">incoming</span></div>
+          <div class="eb eb-derives"><span class="arrow-up">←</span> DERIVES <span class="dir-badge">incoming</span></div>
+          <div style="margin-top:2px"><span class="depth-badge">MAX DEPTH: 2</span></div>
+        </div>
+      </div>
+
+      <div>
+        <div class="sec-title">③ 探索の広がり（BFS）</div>
+        <div class="tree">
+          <div class="tree-row">
+            <div class="depth-label">Depth 0</div>
+            <div class="tree-nodes">
+              <span class="nb nb-claim">CLAIM</span>
+              <span class="nb nb-definition">DEFINITION</span>
+              <span class="nb nb-conclusion">CONCLUSION</span>
+            </div>
+          </div>
+          <div class="tree-connector">
+            <span class="arrow-up" style="color:#81c784">↑SUPPORTS</span>
+            <span class="arrow-up" style="color:#90caf9">↑DERIVES</span>
+          </div>
+          <div class="tree-row">
+            <div class="depth-label">Depth 1</div>
+            <div class="tree-nodes">
+              <span class="nb nb-evidence">EVIDENCE</span>
+            </div>
+          </div>
+          <div class="tree-connector">
+            <span class="arrow-up" style="color:#81c784">↑SUPPORTS</span>
+          </div>
+          <div class="tree-row">
+            <div class="depth-label">Depth 2</div>
+            <div class="tree-nodes">
+              <span class="nb nb-evidence">EVIDENCE</span>
+            </div>
+          </div>
+        </div>
+        <div style="margin-top:8px;font-size:0.68rem;color:#555">除外ノードなし</div>
+      </div>
+
+      <div class="result-row">
+        <strong>取得される情報：</strong><br>
+        定義（DEFINITION）、具体的な事実・数値・リスト（EVIDENCE）を優先。
+        コンテキスト順は DEFINITION → EVIDENCE → CLAIM → CONCLUSION。
+        旧v1では depth=0 でEVIDENCEがゼロだった。
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════ HOW ══ -->
+  <div class="card card-how">
+    <div class="card-head">
+      <span class="qtype-badge qb-how">HOW</span>
+      <div class="card-title">手順・方法を問う</div>
+      <div class="card-desc">「どうやってXをするか」「どのようにXを実現するか」</div>
+      <div class="card-ex card-ex-how">"How does the system identify argumentative units?"</div>
+    </div>
+    <div class="card-body">
+
+      <div>
+        <div class="sec-title">① BM25 入口選定</div>
+        <div class="node-badges">
+          <span class="nb nb-claim">CLAIM</span>
+          <span class="nb nb-conclusion">CONCLUSION</span>
+        </div>
+      </div>
+
+      <div>
+        <div class="sec-title">② グラフ探索ルール</div>
+        <div style="display:flex;flex-direction:column;gap:4px">
+          <div class="eb eb-supports"><span class="arrow-up">←</span> SUPPORTS <span class="dir-badge">incoming</span></div>
+          <div class="eb eb-derives"><span class="arrow-up">←</span> DERIVES <span class="dir-badge">incoming</span></div>
+          <div style="margin-top:2px"><span class="depth-badge">MAX DEPTH: 3</span></div>
+        </div>
+        <div style="margin-top:6px;font-size:0.68rem;color:#555;line-height:1.5">
+          ※ 旧v1は ILLUSTRATES（図→主張）を使用していたが<br>
+          テキスト論文にはほぼ存在しないためSUPPORTSへ変更
+        </div>
+      </div>
+
+      <div>
+        <div class="sec-title">③ 探索の広がり（BFS）</div>
+        <div class="tree">
+          <div class="tree-row">
+            <div class="depth-label">Depth 0</div>
+            <div class="tree-nodes">
+              <span class="nb nb-claim">CLAIM</span>
+              <span class="nb nb-conclusion">CONCLUSION</span>
+            </div>
+          </div>
+          <div class="tree-connector">
+            <span class="arrow-up" style="color:#81c784">↑SUPPORTS</span>
+            <span class="arrow-up" style="color:#90caf9">↑DERIVES</span>
+          </div>
+          <div class="tree-row">
+            <div class="depth-label">Depth 1</div>
+            <div class="tree-nodes">
+              <span class="nb nb-evidence">EVIDENCE</span>
+            </div>
+          </div>
+          <div class="tree-connector"><span class="arrow-up" style="color:#81c784">↑SUPPORTS</span></div>
+          <div class="tree-row">
+            <div class="depth-label">Depth 2–3</div>
+            <div class="tree-nodes">
+              <span class="nb nb-evidence">EVIDENCE</span>
+              <span class="nb nb-caveat">CAVEAT</span>
+            </div>
+          </div>
+        </div>
+        <div style="margin-top:8px;font-size:0.68rem;color:#555">除外ノードなし（手順の制約も含める）</div>
+      </div>
+
+      <div class="result-row">
+        <strong>取得される情報：</strong><br>
+        WHY と同じ深さ（depth=3）で探索するが、因果よりも「手順を支持する根拠」
+        に焦点を当てる。ASSUMESは辿らず、手順的な証拠チェーンを収集する。
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ════════════════════════════ EVIDENCE ══ -->
+  <div class="card card-evidence">
+    <div class="card-head">
+      <span class="qtype-badge qb-evidence">EVIDENCE</span>
+      <div class="card-title">支持証拠を問う</div>
+      <div class="card-desc">「Xの根拠は何か」「Xを支持するデータは」</div>
+      <div class="card-ex card-ex-evidence">"What evidence supports the claim about accuracy?"</div>
+    </div>
+    <div class="card-body">
+
+      <div>
+        <div class="sec-title">① BM25 入口選定</div>
+        <div class="node-badges">
+          <span class="nb nb-claim">CLAIM</span>
+          <span style="font-size:0.68rem;color:#666;padding-top:2px">← CLAIMのみ（主張から直接探す）</span>
+        </div>
+      </div>
+
+      <div>
+        <div class="sec-title">② グラフ探索ルール</div>
+        <div style="display:flex;flex-direction:column;gap:4px">
+          <div class="eb eb-supports"><span class="arrow-up">←</span> SUPPORTS <span class="dir-badge">incoming</span></div>
+          <div style="margin-top:2px"><span class="depth-badge">MAX DEPTH: 2</span></div>
+        </div>
+        <div style="margin-top:6px;font-size:0.68rem;color:#555">
+          証拠に特化してSUPPORTSのみ追跡。<br>他エッジは辿らない（余計な情報を排除）
+        </div>
+      </div>
+
+      <div>
+        <div class="sec-title">③ 探索の広がり（BFS）</div>
+        <div class="tree">
+          <div class="tree-row">
+            <div class="depth-label">Depth 0</div>
+            <div class="tree-nodes">
+              <span class="nb nb-claim">CLAIM</span>
+            </div>
+          </div>
+          <div class="tree-connector">
+            <span class="arrow-up" style="color:#81c784">↑SUPPORTS のみ</span>
+          </div>
+          <div class="tree-row">
+            <div class="depth-label">Depth 1</div>
+            <div class="tree-nodes">
+              <span class="nb nb-evidence">EVIDENCE</span>
+            </div>
+          </div>
+          <div class="tree-connector"><span class="arrow-up" style="color:#81c784">↑SUPPORTS</span></div>
+          <div class="tree-row">
+            <div class="depth-label">Depth 2</div>
+            <div class="tree-nodes">
+              <span class="nb nb-evidence">EVIDENCE</span>
+            </div>
+          </div>
+        </div>
+        <div class="exclude-row" style="margin-top:8px">
+          <span class="ex-label">除外</span>
+          <span class="nb nb-contrast" style="font-size:0.63rem;padding:2px 7px">CONTRAST</span>
+          <span class="nb nb-assumption" style="font-size:0.63rem;padding:2px 7px">ASSUMPTION</span>
+        </div>
+      </div>
+
+      <div class="result-row">
+        <strong>取得される情報：</strong><br>
+        純粋な支持証拠のみをピンポイントで収集。CONTRASTやASSUMPTIONを除外することで
+        「なぜ」「前提」といった余分な情報を排除し、証拠に集中したコンテキストを生成する。
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════ ASSUMPTION ══ -->
+  <div class="card card-assumption">
+    <div class="card-head">
+      <span class="qtype-badge qb-assumption">ASSUMPTION</span>
+      <div class="card-title">暗黙的前提を問う</div>
+      <div class="card-desc">「Xの前提条件は何か」「何を仮定しているか」</div>
+      <div class="card-ex card-ex-assumption">"What assumptions does this approach rely on?"</div>
+    </div>
+    <div class="card-body">
+
+      <div>
+        <div class="sec-title">① BM25 入口選定</div>
+        <div class="node-badges">
+          <span class="nb nb-claim">CLAIM</span>
+          <span class="nb nb-conclusion">CONCLUSION</span>
+        </div>
+      </div>
+
+      <div>
+        <div class="sec-title">② グラフ探索ルール</div>
+        <div style="display:flex;flex-direction:column;gap:4px">
+          <div class="eb eb-assumes"><span class="arrow-up">→</span> ASSUMES <span class="dir-badge">outgoing</span></div>
+          <div style="margin-top:2px"><span class="depth-badge">MAX DEPTH: 2</span></div>
+        </div>
+        <div style="margin-top:6px;font-size:0.68rem;color:#555;line-height:1.5">
+          エッジ方向に注目：outgoing（CLAIMから<strong>出ていく</strong>方向）<br>
+          CLAIM → ASSUMES → ASSUMPTIONという流れを辿る。<br>
+          他クエリ型はincomingが多いが、これのみoutgoing
+        </div>
+      </div>
+
+      <div>
+        <div class="sec-title">③ 探索の広がり（BFS）</div>
+        <div class="tree">
+          <div class="tree-row">
+            <div class="depth-label">Depth 0</div>
+            <div class="tree-nodes">
+              <span class="nb nb-claim">CLAIM</span>
+              <span class="nb nb-conclusion">CONCLUSION</span>
+            </div>
+          </div>
+          <div class="tree-connector">
+            <span class="arrow-up" style="color:#ffcc80">↓ASSUMES（outgoing）</span>
+          </div>
+          <div class="tree-row">
+            <div class="depth-label">Depth 1</div>
+            <div class="tree-nodes">
+              <span class="nb nb-assumption">ASSUMPTION</span>
+            </div>
+          </div>
+          <div class="tree-connector"><span class="arrow-up" style="color:#ffcc80">↓ASSUMES</span></div>
+          <div class="tree-row">
+            <div class="depth-label">Depth 2</div>
+            <div class="tree-nodes">
+              <span class="nb nb-assumption">ASSUMPTION</span>
+            </div>
+          </div>
+        </div>
+        <div style="margin-top:8px;font-size:0.68rem;color:#555">除外ノードなし</div>
+      </div>
+
+      <div class="result-row">
+        <strong>取得される情報：</strong><br>
+        CLAIM/CONCLUSIONが暗黙的に依存している前提（ASSUMPTION）を収集。
+        唯一outgoing方向のエッジを主に辿るクエリ型。
+        ネストした前提（前提の前提）もdepth=2で取得できる。
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ══════════════════════════ ノード・エッジ凡例 ══ -->
+  <div class="legend-box card-legend-box">
+    <div>
+      <h3>ノード型</h3>
+      <div class="legend-grid">
+        <div class="legend-entry"><span class="nb nb-claim" style="font-size:0.63rem;padding:2px 7px">CLAIM</span><span>中心的主張・命題</span></div>
+        <div class="legend-entry"><span class="nb nb-evidence" style="font-size:0.63rem;padding:2px 7px">EVIDENCE</span><span>実証的根拠・数値・結果</span></div>
+        <div class="legend-entry"><span class="nb nb-assumption" style="font-size:0.63rem;padding:2px 7px">ASSUMPTION</span><span>暗黙的前提・仮定</span></div>
+        <div class="legend-entry"><span class="nb nb-conclusion" style="font-size:0.63rem;padding:2px 7px">CONCLUSION</span><span>推論から導かれる結論</span></div>
+        <div class="legend-entry"><span class="nb nb-definition" style="font-size:0.63rem;padding:2px 7px">DEFINITION</span><span>概念・用語の定義</span></div>
+        <div class="legend-entry"><span class="nb nb-caveat" style="font-size:0.63rem;padding:2px 7px">CAVEAT</span><span>限定条件・例外・留保</span></div>
+        <div class="legend-entry"><span class="nb nb-contrast" style="font-size:0.63rem;padding:2px 7px">CONTRAST</span><span>対比・反例</span></div>
+      </div>
+    </div>
+    <div>
+      <h3>エッジ型</h3>
+      <div class="legend-grid">
+        <div class="legend-entry"><span class="eb eb-supports" style="font-size:0.63rem;padding:2px 7px">SUPPORTS</span><span>根拠 → 主張を支持</span></div>
+        <div class="legend-entry"><span class="eb eb-derives" style="font-size:0.63rem;padding:2px 7px">DERIVES</span><span>根拠 → 結論を導出</span></div>
+        <div class="legend-entry"><span class="eb eb-assumes" style="font-size:0.63rem;padding:2px 7px">ASSUMES</span><span>主張 → 前提に依存</span></div>
+      </div>
+    </div>
+    <div>
+      <h3>エッジ方向</h3>
+      <div class="legend-grid">
+        <div class="legend-entry">
+          <span class="dir-badge" style="font-size:0.65rem">incoming</span>
+          <span>エッジの<strong>逆向き</strong>を辿る<br><span style="font-size:0.65rem;color:#666">例: CLAIMから見てSUPPORTSを<br>incoming → EVIDENCEを発見</span></span>
+        </div>
+        <div class="legend-entry" style="margin-top:4px">
+          <span class="dir-badge" style="font-size:0.65rem">outgoing</span>
+          <span>エッジの<strong>順向き</strong>を辿る<br><span style="font-size:0.65rem;color:#666">例: CLAIMからASSUMESを<br>outgoing → ASSUMPTIONを発見</span></span>
+        </div>
+      </div>
+    </div>
+    <div style="margin-top:auto;padding-top:12px;border-top:1px solid #1e2330">
+      <div style="font-size:0.68rem;color:#555;line-height:1.7">
+        <strong style="color:#666">全クエリ型共通：</strong><br>
+        Step①でBM25により入口ノードを<br>上位10件に絞ってからBFS探索を開始。<br>
+        クエリ盲目問題はこのステップで解消。
+      </div>
+    </div>
+  </div>
+
+</div>
+</body>
+</html>

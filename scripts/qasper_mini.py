@@ -83,7 +83,12 @@ def load_qasper_samples(num_papers: int, num_questions: int):
 
 # ── ArgumentativeRAG の構築・インデックス ─────────────────────────────────────
 
-def build_and_index_argumentative_rag(client, raw_by_paper: dict[str, str]):
+def build_and_index_argumentative_rag(
+    client,
+    raw_by_paper: dict[str, str],
+    embedding_model: str,
+    embedding_device: str,
+):
     """ArgumentativeRAGPipeline を構築し、全論文をインデックスする。"""
     from ap_rag.graph.networkx_store import NetworkXGraphStore
     from ap_rag.indexing.chunker import SentenceChunker
@@ -93,8 +98,16 @@ def build_and_index_argumentative_rag(client, raw_by_paper: dict[str, str]):
     from ap_rag.retrieval.query_classifier import QueryClassifier
     from ap_rag.retrieval.traversal import GraphTraverser
     from ap_rag.retrieval.context_builder import ContextBuilder
+    from ap_rag.retrieval.embedding_selector import EmbeddingNodeSelector
     from ap_rag.generation.generator import AnswerGenerator
     from ap_rag.pipeline import ArgumentativeRAGPipeline
+
+    console.print(f"  [dim]入口選定モデル: {embedding_model} (device={embedding_device})[/]")
+    node_selector = EmbeddingNodeSelector(
+        model_name=embedding_model,
+        device=embedding_device,
+        top_k=10,
+    )
 
     store = NetworkXGraphStore()
     indexer = IndexingPipeline(
@@ -128,6 +141,7 @@ def build_and_index_argumentative_rag(client, raw_by_paper: dict[str, str]):
         traverser=GraphTraverser(store=store),
         context_builder=ContextBuilder(max_nodes=15),
         generator=AnswerGenerator(client=client, model="gpt-4o-mini"),
+        node_selector=node_selector,
     )
     return pipeline
 
@@ -178,13 +192,18 @@ def print_comparison(results: dict, use_judge: bool) -> None:
     table.add_column("EM", justify="right", width=8)
     table.add_column("F1", justify="right", width=8)
     if use_judge:
-        table.add_column("Faithfulness↑", justify="right", width=16)
-        table.add_column("Hallucination↓", justify="right", width=16)
+        table.add_column("Correctness↑", justify="right", width=14)
+        table.add_column("Faithfulness↑", justify="right", width=14)
+        table.add_column("Hallucination↓", justify="right", width=15)
     table.add_column("N", justify="right", width=5)
 
     for name, result in results.items():
         row = [name, f"{result.em:.3f}", f"{result.f1:.3f}"]
         if use_judge:
+            row.append(
+                f"{result.answer_correctness:.3f}"
+                if result.answer_correctness is not None else "—"
+            )
             row.append(
                 f"{result.faithfulness:.3f}" if result.faithfulness is not None else "—"
             )
@@ -265,11 +284,18 @@ def print_summary(results: dict, use_judge: bool) -> None:
 
 # ── メイン ────────────────────────────────────────────────────────────────────
 
-def main(num_papers: int, num_questions: int, use_judge: bool) -> None:
+def main(
+    num_papers: int,
+    num_questions: int,
+    use_judge: bool,
+    embedding_model: str,
+    embedding_device: str,
+) -> None:
     console.print(Panel.fit(
         "[bold cyan]QASPER ミニ評価 — Argumentative-Path RAG[/]\n"
         f"[dim]論文 {num_papers} 件 × 各 {num_questions} 問 / "
-        f"LLM-as-Judge: {'有効' if use_judge else 'スキップ'}[/]",
+        f"LLM-as-Judge: {'有効' if use_judge else 'スキップ'} / "
+        f"入口選定: {embedding_model.split('/')[-1]}[/]",
         border_style="cyan",
     ))
 
@@ -294,7 +320,9 @@ def main(num_papers: int, num_questions: int, use_judge: bool) -> None:
     # ── Step 2: インデックス構築 ──────────────────────────────────────────────
     console.print(Rule("[bold]Step 2: インデックス構築[/]"))
     console.print("[bold]ArgumentativeRAG:[/]")
-    ap_rag = build_and_index_argumentative_rag(client, raw_by_paper)
+    ap_rag = build_and_index_argumentative_rag(
+        client, raw_by_paper, embedding_model, embedding_device
+    )
 
     console.print("[bold]BM25RAG:[/]")
     bm25_rag = build_and_index_bm25(client, raw_by_paper)
@@ -325,8 +353,21 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="QASPER ミニ評価")
     parser.add_argument("--papers",    type=int, default=3,  help="論文数（デフォルト: 3）")
     parser.add_argument("--questions", type=int, default=5,  help="論文あたりの質問数（デフォルト: 5）")
-    parser.add_argument("--no-judge",  action="store_true",  help="LLM-as-judge をスキップ")
-    parser.add_argument("--debug",     action="store_true",  help="デバッグログを表示")
+    parser.add_argument("--no-judge",        action="store_true",  help="LLM-as-judge をスキップ")
+    parser.add_argument("--debug",           action="store_true",  help="デバッグログを表示")
+    parser.add_argument(
+        "--embedding-model",
+        type=str,
+        default="intfloat/e5-mistral-7b-instruct",
+        help="入口選定に使う埋め込みモデル（デフォルト: intfloat/e5-mistral-7b-instruct）",
+    )
+    parser.add_argument(
+        "--embedding-device",
+        type=str,
+        default="cpu",
+        choices=["cpu", "cuda", "mps"],
+        help="埋め込みモデルのデバイス (デフォルト: cpu)",
+    )
     args = parser.parse_args()
 
     if args.debug:
@@ -338,4 +379,6 @@ if __name__ == "__main__":
         num_papers=args.papers,
         num_questions=args.questions,
         use_judge=not args.no_judge,
+        embedding_model=args.embedding_model,
+        embedding_device=args.embedding_device,
     )

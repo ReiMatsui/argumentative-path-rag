@@ -28,6 +28,7 @@ from ap_rag.indexing.extractor import EdgeExtractor
 from ap_rag.indexing.pipeline import IndexingPipeline, IndexingResult
 from ap_rag.models.taxonomy import TRAVERSAL_STRATEGIES, NodeType, QueryType
 from ap_rag.retrieval.context_builder import ContextBuilder, RetrievalContext
+from ap_rag.retrieval.embedding_selector import EmbeddingNodeSelector
 from ap_rag.retrieval.query_classifier import QueryClassifier
 from ap_rag.retrieval.selector import BM25NodeSelector
 from ap_rag.retrieval.traversal import GraphTraverser
@@ -54,14 +55,18 @@ class ArgumentativeRAGPipeline:
         traverser: GraphTraverser,
         context_builder: ContextBuilder,
         generator: AnswerGenerator,
-        node_selector: BM25NodeSelector | None = None,
+        node_selector: EmbeddingNodeSelector | BM25NodeSelector | None = None,
     ) -> None:
         self._store = store
         self._query_classifier = query_classifier
         self._traverser = traverser
         self._context_builder = context_builder
         self._generator = generator
-        self._node_selector = node_selector or BM25NodeSelector(top_k=10)
+        # デフォルトは BM25（軽量・依存なし）。
+        # 研究計画通りに E5-Mistral を使う場合は PipelineFactory.from_settings() を利用。
+        self._node_selector: EmbeddingNodeSelector | BM25NodeSelector = (
+            node_selector if node_selector is not None else BM25NodeSelector(top_k=10)
+        )
 
     def query(self, query: str, doc_id: str) -> GenerationResult:
         """クエリに対する回答を生成して返す。
@@ -146,6 +151,11 @@ class PipelineFactory:
             user=settings.neo4j_user,
             password=settings.neo4j_password,
         )
+        node_selector = EmbeddingNodeSelector(
+            model_name=settings.embedding_model,
+            device=settings.embedding_device,
+            top_k=10,
+        )
         return ArgumentativeRAGPipeline(
             store=store,
             query_classifier=QueryClassifier(
@@ -158,6 +168,7 @@ class PipelineFactory:
                 client=client,
                 model=settings.openai_generator_model,
             ),
+            node_selector=node_selector,
         )
 
     @staticmethod
