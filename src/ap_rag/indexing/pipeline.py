@@ -5,20 +5,29 @@
 の一連の処理を実行する。
 
 研究計画書 §4.1「オフライン（事前処理）」フロー。
+
+並列化:
+    NodeClassifier / EdgeExtractor の呼び出しは I/O バウンド（OpenAI API 待ち）
+    なので ThreadPoolExecutor で並列実行できる。グラフへの書き込みだけを
+    threading.Lock で直列化することで安全性を確保する。
+    デフォルト max_workers=4 は一般的な OpenAI Tier でレートリミットに
+    かからない安全な並列数。
 """
 
 from __future__ import annotations
 
 import logging
+import threading
+from concurrent.futures import Future, ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 
-from rich.progress import Progress, SpinnerColumn, TextColumn
+from rich.progress import BarColumn, Progress, SpinnerColumn, TaskProgressColumn, TextColumn
 
 from ap_rag.graph.store import GraphStore
 from ap_rag.indexing.chunker import DocumentChunk, SentenceChunker
 from ap_rag.indexing.classifier import NodeClassifier
 from ap_rag.indexing.extractor import EdgeExtractor
-from ap_rag.models.graph import ArgumentGraph
+from ap_rag.models.graph import ArgumentEdge, ArgumentGraph, ArgumentNode
 
 logger = logging.getLogger(__name__)
 
@@ -34,6 +43,14 @@ class IndexingResult:
     graph: ArgumentGraph
 
 
+# チャンク単位の処理結果（スレッド → メインスレッドへの受け渡し用）
+@dataclass
+class _ChunkResult:
+    chunk_idx: int
+    nodes: list[ArgumentNode]
+    edges: list[ArgumentEdge]
+
+
 class IndexingPipeline:
     """文書のインデックス処理を実行するパイプライン。
 
@@ -43,6 +60,10 @@ class IndexingPipeline:
         extractor: ノード間のエッジを抽出するクラス。
         store: グラフを永続化するストア。
         show_progress: 進行状況をターミナルに表示するか。
+        max_workers: 並列 API 呼び出し数。
+                     OpenAI の一般的な Tier でレートリミットに
+                     かからない目安として 4 をデフォルトとする。
+                     直列処理にしたい場合は 1 を指定。
     """
 
     def __init__(
@@ -52,12 +73,14 @@ class IndexingPipeline:
         extractor: EdgeExtractor,
         store: GraphStore,
         show_progress: bool = True,
+        max_workers: int = 4,
     ) -> None:
         self._chunker = chunker
         self._classifier = classifier
         self._extractor = extractor
         self._store = store
         self._show_progress = show_progress
+        self._max_workers = max_workers
 
     def run(self, text: str, doc_id: str) -> IndexingResult:
         """文書全体をインデックスする。
@@ -73,13 +96,13 @@ class IndexingPipeline:
 
         # Step 1: チャンク分割
         chunks = self._chunker.chunk(text, doc_id)
-        logger.info("doc_id=%s → %d チャンク", doc_id, len(chunks))
+        logger.info("doc_id=%s → %d チャンク (max_workers=%d)", doc_id, len(chunks), self._max_workers)
 
-        # Step 2 & 3: チャンクごとにノード分類 + エッジ抽出
+        # Step 2 & 3: チャンクごとにノード分類 + エッジ抽出（並列）
         if self._show_progress:
-            self._process_with_progress(chunks, graph)
+            self._process_parallel_with_progress(chunks, graph)
         else:
-            self._process_chunks(chunks, graph)
+            self._process_parallel(chunks, graph)
 
         # Step 4: グラフ保存
         self._store.save_graph(graph)
@@ -102,57 +125,105 @@ class IndexingPipeline:
 
     # ── private ────────────────────────────────────────────────────────────
 
-    def _process_chunks(
-        self,
-        chunks: list[DocumentChunk],
-        graph: ArgumentGraph,
-    ) -> None:
-        for chunk in chunks:
-            self._process_one_chunk(chunk, graph)
+    def _call_llm_for_chunk(self, chunk: DocumentChunk) -> _ChunkResult:
+        """1チャンクの LLM 処理（classify + extract）をスレッド内で実行する。
 
-    def _process_with_progress(
+        グラフへの書き込みは行わず、結果を返すだけにすることで
+        スレッドセーフ性を確保する。
+        """
+        nodes = self._classifier.classify(chunk)
+
+        edges: list[ArgumentEdge] = []
+        if len(nodes) >= 2:
+            edges = self._extractor.extract(nodes)
+
+        return _ChunkResult(chunk_idx=chunk.chunk_idx, nodes=nodes, edges=edges)
+
+    def _write_chunk_result(
+        self,
+        result: _ChunkResult,
+        graph: ArgumentGraph,
+        lock: threading.Lock,
+    ) -> None:
+        """チャンク処理結果をグラフに書き込む（ロックで直列化）。"""
+        with lock:
+            for node in result.nodes:
+                try:
+                    graph.add_node(node)
+                except ValueError:
+                    logger.debug("重複ノードをスキップ: %s", node.id)
+
+            for edge in result.edges:
+                # 両端ノードがグラフに存在する場合のみ追加
+                if edge.source_id in graph.nodes and edge.target_id in graph.nodes:
+                    try:
+                        graph.add_edge(edge)
+                    except ValueError as e:
+                        logger.debug("エッジ追加スキップ: %s", e)
+
+    def _process_parallel(
         self,
         chunks: list[DocumentChunk],
         graph: ArgumentGraph,
     ) -> None:
+        """進行状況表示なしの並列処理。"""
+        lock = threading.Lock()
+
+        with ThreadPoolExecutor(max_workers=self._max_workers) as executor:
+            future_to_chunk: dict[Future[_ChunkResult], DocumentChunk] = {
+                executor.submit(self._call_llm_for_chunk, chunk): chunk
+                for chunk in chunks
+            }
+            for future in as_completed(future_to_chunk):
+                chunk = future_to_chunk[future]
+                try:
+                    chunk_result = future.result()
+                except Exception as e:
+                    logger.warning("チャンク %d の処理でエラー: %s", chunk.chunk_idx, e)
+                    continue
+                self._write_chunk_result(chunk_result, graph, lock)
+
+    def _process_parallel_with_progress(
+        self,
+        chunks: list[DocumentChunk],
+        graph: ArgumentGraph,
+    ) -> None:
+        """進行状況バー付きの並列処理。"""
+        lock = threading.Lock()
+        total = len(chunks)
+
         with Progress(
             SpinnerColumn(),
             TextColumn("[progress.description]{task.description}"),
+            BarColumn(),
+            TaskProgressColumn(),
             transient=True,
         ) as progress:
-            task = progress.add_task("インデックス中...", total=len(chunks))
-            for chunk in chunks:
-                progress.update(
-                    task,
-                    description=f"チャンク {chunk.chunk_idx + 1}/{len(chunks)} 処理中",
-                )
-                self._process_one_chunk(chunk, graph)
-                progress.advance(task)
+            task = progress.add_task(
+                f"インデックス中… (並列数={self._max_workers})",
+                total=total,
+            )
 
-    def _process_one_chunk(
-        self,
-        chunk: DocumentChunk,
-        graph: ArgumentGraph,
-    ) -> None:
-        """1チャンクのノード分類とエッジ抽出を実行してグラフに追加する。"""
-        # ノード分類
-        nodes = self._classifier.classify(chunk)
-        for node in nodes:
-            try:
-                graph.add_node(node)
-            except ValueError:
-                # 同一テキストが重複することがあるため、重複は無視
-                logger.debug("重複ノードをスキップ: %s", node.id)
-                continue
+            with ThreadPoolExecutor(max_workers=self._max_workers) as executor:
+                future_to_chunk: dict[Future[_ChunkResult], DocumentChunk] = {
+                    executor.submit(self._call_llm_for_chunk, chunk): chunk
+                    for chunk in chunks
+                }
+                for future in as_completed(future_to_chunk):
+                    chunk = future_to_chunk[future]
+                    try:
+                        chunk_result = future.result()
+                    except Exception as e:
+                        logger.warning("チャンク %d の処理でエラー: %s", chunk.chunk_idx, e)
+                        progress.advance(task)
+                        continue
 
-        # エッジ抽出（チャンク内の有効なノードのみ対象）
-        added_nodes = [n for n in nodes if n.id in graph.nodes]
-        if len(added_nodes) < 2:
-            return
-
-        edges = self._extractor.extract(added_nodes)
-        for edge in edges:
-            try:
-                graph.add_edge(edge)
-            except ValueError as e:
-                logger.debug("エッジ追加スキップ: %s", e)
+                    self._write_chunk_result(chunk_result, graph, lock)
+                    progress.update(
+                        task,
+                        advance=1,
+                        description=(
+                            f"インデックス中… (並列数={self._max_workers})"
+                            f" [{chunk_result.chunk_idx + 1}/{total} 完了]"
+                        ),
+                    )
