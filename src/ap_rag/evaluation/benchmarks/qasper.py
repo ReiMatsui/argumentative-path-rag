@@ -213,6 +213,9 @@ class QASPERRunner:
         num_papers: 使用する論文数。
         num_questions: 論文あたりの最大質問数。
         split: QASPER の分割（"validation" 推奨）。
+        query_classifier: クエリ型分類器。指定されれば LLM ベースの分類を
+            使い、パイプライン内の再分類と ``per_query_type`` 集計の型が
+            一致するようにする。None の場合はキーワード規則にフォールバック。
     """
 
     def __init__(
@@ -222,17 +225,21 @@ class QASPERRunner:
         num_papers: int = 10,
         num_questions_per_paper: int = 5,
         split: str = "validation",
+        query_classifier: Any | None = None,
     ) -> None:
         self._rag = rag_pipeline
         self._indexer = indexing_pipeline
         self._num_papers = num_papers
         self._num_questions = num_questions_per_paper
         self._split = split
+        self._query_classifier = query_classifier
 
     def load_samples(self) -> list[EvaluationSample]:
         """QASPER から EvaluationSample のリストを生成する。
 
         各論文をインデックスし、QAペアを EvaluationSample に変換する。
+        クエリ型は `self._query_classifier` があれば LLM 分類を使い、
+        なければキーワード規則（``infer_query_type``）にフォールバックする。
         """
         loader = QASPERLoader(split=self._split, max_papers=self._num_papers)
         raw_samples = loader.load()
@@ -241,6 +248,25 @@ class QASPERRunner:
         indexed_papers: set[str] = set()
         eval_samples: list[EvaluationSample] = []
         paper_question_count: dict[str, int] = {}
+
+        # 同じ質問を複数回分類しないよう簡易キャッシュ
+        qtype_cache: dict[str, str] = {}
+
+        def _classify(question: str) -> str:
+            if question in qtype_cache:
+                return qtype_cache[question]
+            if self._query_classifier is None:
+                qt = infer_query_type(question)
+            else:
+                try:
+                    qt = self._query_classifier.classify(question).value
+                except Exception as e:
+                    logger.warning(
+                        "QueryClassifier 失敗 (規則ベースに fallback): %s", e
+                    )
+                    qt = infer_query_type(question)
+            qtype_cache[question] = qt
+            return qt
 
         for raw in raw_samples:
             # 質問数の上限チェック
@@ -264,7 +290,7 @@ class QASPERRunner:
                 predicted_answer="",  # 評価時に埋める
                 retrieved_contexts=[],
                 doc_id=raw.paper_id,
-                query_type=infer_query_type(raw.question),
+                query_type=_classify(raw.question),
             ))
             paper_question_count[raw.paper_id] = count + 1
 

@@ -24,6 +24,7 @@ from ap_rag.graph.neo4j_store import Neo4jGraphStore
 from ap_rag.graph.store import GraphStore
 from ap_rag.indexing.chunker import SentenceChunker
 from ap_rag.indexing.classifier import NodeClassifier
+from ap_rag.indexing.cross_chunk import CrossChunkEdgeExtractor
 from ap_rag.indexing.extractor import EdgeExtractor
 from ap_rag.indexing.pipeline import IndexingPipeline, IndexingResult
 from ap_rag.models.taxonomy import TRAVERSAL_STRATEGIES, NodeType, QueryType
@@ -106,14 +107,14 @@ class ArgumentativeRAGPipeline:
         query_type: QueryType,
         query: str,
     ):
-        """探索戦略に基づいて入口ノードを取得し、BM25 でクエリ関連度フィルタをかける。
+        """探索戦略に基づいて入口ノードを取得し、セレクタでクエリ関連度フィルタをかける。
 
         旧実装は「型に合致する全ノードを返す」だけで、350 ノードの論文では
         150 以上の無関係な CLAIM が候補になっていた（クエリ盲目問題）。
 
         改善 (v2):
           1. 型で候補を絞る（従来通り）
-          2. BM25 でクエリとの関連度を計算し上位 top_k のみ返す
+          2. node_selector（BM25 または 埋め込み）でクエリ関連度を計算し上位 top_k のみ返す
           → BFS 探索の出発点が質問に関連したノードになり、
             コンテキストの質が大幅に向上する。
         """
@@ -123,11 +124,12 @@ class ArgumentativeRAGPipeline:
             nodes = self._store.get_nodes_by_type(doc_id, node_type)
             candidate_nodes.extend(nodes)
 
-        # BM25 でクエリ関連度の高い入口ノードのみに絞る
+        # セレクタでクエリ関連度の高い入口ノードのみに絞る
         entry_nodes = self._node_selector.select(candidate_nodes, query)
         logger.info(
-            "入口ノード: 候補 %d → BM25 選定後 %d (query_type=%s)",
+            "入口ノード: 候補 %d → %s 選定後 %d (query_type=%s)",
             len(candidate_nodes),
+            type(self._node_selector).__name__,
             len(entry_nodes),
             query_type.value,
         )
@@ -185,15 +187,26 @@ class PipelineFactory:
             user=settings.neo4j_user,
             password=settings.neo4j_password,
         )
+        edge_extractor = EdgeExtractor(
+            client=client,
+            model=settings.openai_classifier_model,
+        )
+        # チャンク間エッジの補完器を構築（研究計画 §4.1 に追加した拡張ステップ）。
+        # 計算コストを抑えるため embedding_device は本番では "cuda" などに上書き推奨。
+        cross_chunk = CrossChunkEdgeExtractor(
+            edge_extractor=edge_extractor,
+            embedding_model=settings.embedding_model,
+            device=settings.embedding_device,
+            top_k=5,
+            batch_size=8,
+        )
         return IndexingPipeline(
             chunker=SentenceChunker(),
             classifier=NodeClassifier(
                 client=client,
                 model=settings.openai_classifier_model,
             ),
-            extractor=EdgeExtractor(
-                client=client,
-                model=settings.openai_classifier_model,
-            ),
+            extractor=edge_extractor,
             store=store,
+            cross_chunk_extractor=cross_chunk,
         )

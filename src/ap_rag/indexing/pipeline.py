@@ -26,6 +26,7 @@ from rich.progress import BarColumn, Progress, SpinnerColumn, TaskProgressColumn
 from ap_rag.graph.store import GraphStore
 from ap_rag.indexing.chunker import DocumentChunk, SentenceChunker
 from ap_rag.indexing.classifier import NodeClassifier
+from ap_rag.indexing.cross_chunk import CrossChunkEdgeExtractor
 from ap_rag.indexing.extractor import EdgeExtractor
 from ap_rag.models.graph import ArgumentEdge, ArgumentGraph, ArgumentNode
 
@@ -74,6 +75,7 @@ class IndexingPipeline:
         store: GraphStore,
         show_progress: bool = True,
         max_workers: int = 4,
+        cross_chunk_extractor: CrossChunkEdgeExtractor | None = None,
     ) -> None:
         self._chunker = chunker
         self._classifier = classifier
@@ -81,6 +83,7 @@ class IndexingPipeline:
         self._store = store
         self._show_progress = show_progress
         self._max_workers = max_workers
+        self._cross_chunk_extractor = cross_chunk_extractor
 
     def run(self, text: str, doc_id: str) -> IndexingResult:
         """文書全体をインデックスする。
@@ -104,6 +107,10 @@ class IndexingPipeline:
         else:
             self._process_parallel(chunks, graph)
 
+        # Step 3.5: チャンクをまたぐエッジの補完（任意）
+        if self._cross_chunk_extractor is not None:
+            self._run_cross_chunk_step(graph)
+
         # Step 4: グラフ保存
         self._store.save_graph(graph)
 
@@ -124,6 +131,34 @@ class IndexingPipeline:
         return result
 
     # ── private ────────────────────────────────────────────────────────────
+
+    def _run_cross_chunk_step(self, graph: ArgumentGraph) -> None:
+        """チャンク間エッジ抽出器を走らせて新規辺を `graph` に追加する。"""
+        assert self._cross_chunk_extractor is not None
+        all_nodes = list(graph.nodes.values())
+        existing_edges = list(graph.edges.values())
+
+        before = len(existing_edges)
+        try:
+            new_edges = self._cross_chunk_extractor.extract(all_nodes, existing_edges)
+        except Exception as e:
+            logger.warning("CrossChunkEdgeExtractor 失敗: %s", e)
+            return
+
+        for edge in new_edges:
+            if edge.source_id not in graph.nodes or edge.target_id not in graph.nodes:
+                continue
+            try:
+                graph.add_edge(edge)
+            except ValueError as e:
+                logger.debug("チャンク間エッジ追加スキップ: %s", e)
+
+        logger.info(
+            "チャンク間エッジ補完: +%d 辺 (合計 %d → %d)",
+            len(new_edges),
+            before,
+            len(graph.edges),
+        )
 
     def _call_llm_for_chunk(self, chunk: DocumentChunk) -> _ChunkResult:
         """1チャンクの LLM 処理（classify + extract）をスレッド内で実行する。

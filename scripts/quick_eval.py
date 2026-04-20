@@ -16,8 +16,10 @@
     uv run python scripts/quick_eval.py
 
 オプション:
-    --no-judge    LLM-as-judge をスキップ（高速・低コスト）
-    --debug       デバッグログを表示
+    --no-judge           LLM-as-judge をスキップ（高速・低コスト）
+    --consistency-runs N 各サンプルを N 回クエリして一貫性スコアを計測
+                         （デフォルト: 1 = 計測しない、N 倍の API コスト）
+    --debug              デバッグログを表示
 """
 
 from __future__ import annotations
@@ -179,10 +181,15 @@ def make_eval_samples():
 
 # ── 評価実行 ──────────────────────────────────────────────────────────────────
 
-def run_evaluation(system, samples, judge, use_judge: bool):
+def run_evaluation(system, samples, judge, use_judge: bool, consistency_runs: int = 1):
     from ap_rag.evaluation.evaluator import Evaluator
 
-    evaluator = Evaluator(system=system, judge=judge, show_progress=True)
+    evaluator = Evaluator(
+        system=system,
+        judge=judge,
+        show_progress=True,
+        consistency_runs=consistency_runs,
+    )
     return evaluator.evaluate(samples, use_judge=use_judge)
 
 
@@ -190,6 +197,10 @@ def run_evaluation(system, samples, judge, use_judge: bool):
 
 def print_comparison(results: dict, use_judge: bool) -> None:
     console.print(Rule("[bold]評価結果[/]"))
+
+    show_consistency = any(
+        r.answer_consistency is not None for r in results.values()
+    )
 
     table = Table(
         title="ArgumentativeRAG vs BM25 比較",
@@ -203,6 +214,8 @@ def print_comparison(results: dict, use_judge: bool) -> None:
     if use_judge:
         table.add_column("Faithfulness↑", justify="right", width=16)
         table.add_column("Hallucination↓", justify="right", width=16)
+    if show_consistency:
+        table.add_column("Consistency↑", justify="right", width=14)
     table.add_column("N", justify="right", width=5)
 
     for name, result in results.items():
@@ -217,6 +230,11 @@ def print_comparison(results: dict, use_judge: bool) -> None:
             )
             row.append(
                 f"{result.hallucination_rate:.3f}" if result.hallucination_rate is not None else "—"
+            )
+        if show_consistency:
+            row.append(
+                f"{result.answer_consistency:.3f}"
+                if result.answer_consistency is not None else "—"
             )
         row.append(str(result.num_samples))
         table.add_row(*row)
@@ -252,7 +270,7 @@ def print_comparison(results: dict, use_judge: bool) -> None:
 
 # ── メイン ────────────────────────────────────────────────────────────────────
 
-def main(use_judge: bool = True) -> None:
+def main(use_judge: bool = True, consistency_runs: int = 1) -> None:
     console.print(Panel.fit(
         "[bold cyan]Argumentative-Path RAG — クイック評価[/]\n"
         "[dim]合成QAデータ（Q3売上レポート） × ArgumentativeRAG vs BM25[/]",
@@ -295,10 +313,14 @@ def main(use_judge: bool = True) -> None:
     results = {}
 
     console.print(Rule("[bold]Step 2: ArgumentativeRAG 評価[/]"))
-    results["ArgumentativeRAG"] = run_evaluation(ap_rag, samples, judge, use_judge)
+    results["ArgumentativeRAG"] = run_evaluation(
+        ap_rag, samples, judge, use_judge, consistency_runs=consistency_runs
+    )
 
     console.print(Rule("[bold]Step 3: BM25RAG 評価[/]"))
-    results["BM25RAG"] = run_evaluation(bm25_rag, samples, judge, use_judge)
+    results["BM25RAG"] = run_evaluation(
+        bm25_rag, samples, judge, use_judge, consistency_runs=consistency_runs
+    )
 
     # ── 結果表示 ──────────────────────────────────────────────────────────────
     print_comparison(results, use_judge)
@@ -337,6 +359,15 @@ if __name__ == "__main__":
         action="store_true",
         help="LLM-as-judge をスキップ（高速・低コスト）",
     )
+    parser.add_argument(
+        "--consistency-runs",
+        type=int,
+        default=1,
+        help=(
+            "各サンプルを N 回クエリして一貫性スコアを計測（デフォルト: 1 = 計測しない）。"
+            "N>=2 のとき API コストが N 倍になる点に注意。"
+        ),
+    )
     parser.add_argument("--debug", action="store_true", help="デバッグログを表示")
     args = parser.parse_args()
 
@@ -345,4 +376,4 @@ if __name__ == "__main__":
     else:
         logging.basicConfig(level=logging.WARNING)
 
-    main(use_judge=not args.no_judge)
+    main(use_judge=not args.no_judge, consistency_runs=args.consistency_runs)

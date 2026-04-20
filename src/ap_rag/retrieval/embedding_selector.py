@@ -148,6 +148,14 @@ class EmbeddingNodeSelector:
         """キャッシュ済みノード数を返す（デバッグ用）。"""
         return len(self._cache)
 
+    def get_encoder(self) -> SentenceTransformer:
+        """遅延ロード済みの SentenceTransformer を公開 API として返す。
+
+        他コンポーネント（`CrossChunkEdgeExtractor` など）が同じモデルを
+        共有して、E5-Mistral 等の巨大モデルを二重ロードしないために使う。
+        """
+        return self._get_model()
+
     # ── private ───────────────────────────────────────────────────────────────
 
     def _get_model(self) -> SentenceTransformer:

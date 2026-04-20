@@ -52,6 +52,7 @@ class EvaluationResult:
     hallucination_rate: float | None  # ハルシネーション率（0-1、低いほど良い）
     citation_accuracy: float | None   # 引用精度
     answer_correctness: float | None  # LLM判定による回答正解度（0-1）
+    answer_consistency: float | None  # 回答の一貫性（0-1、高いほど安定）
     num_samples: int
     per_query_type: dict[str, dict[str, float]] = field(default_factory=dict)
     raw_scores: list[dict[str, Any]] = field(default_factory=list)
@@ -236,6 +237,42 @@ class LLMJudge:
             return 0.5
 
 
+# ── 回答一貫性 ────────────────────────────────────────────────────────────────
+
+def compute_consistency(answers: list[str]) -> float:
+    """同一質問に対する N 個の回答の一貫性スコアを返す（0.0〜1.0）。
+
+    研究計画書 §4.3 「回答の一貫性 — 同じ質問への回答の安定性」の実装。
+
+    アルゴリズム: 全ペアの正規化トークンレベル F1 の平均を取る。
+      - N=1 なら 1.0 を返す（比較対象なし）
+      - 全回答が同じ → 1.0
+      - 完全に違う → 0.0
+    LLM の非決定性（temperature=0 でも残る）＋ 検索の非決定性の両方を
+    含んだエンドツーエンド指標として機能する。
+
+    外部依存なし。より精度の高い意味的一貫性が必要な場合は
+    将来的に埋め込みベース（cosine 類似度）へ置き換え可能。
+
+    Args:
+        answers: 同一クエリに対する N 回分の回答文字列。
+
+    Returns:
+        平均ペア F1（0.0〜1.0）。N<2 の場合は 1.0 を返す。
+    """
+    n = len(answers)
+    if n < 2:
+        return 1.0
+
+    # 回答は N 個でも比較ペアは N*(N-1)/2 なので小規模なら O(N²) でOK
+    pairwise_scores: list[float] = []
+    for i in range(n):
+        for j in range(i + 1, n):
+            pairwise_scores.append(compute_f1(answers[i], answers[j]))
+
+    return sum(pairwise_scores) / len(pairwise_scores) if pairwise_scores else 1.0
+
+
 # ── アグリゲーション ──────────────────────────────────────────────────────────
 
 def aggregate_results(
@@ -245,6 +282,7 @@ def aggregate_results(
     faithfulness_scores: list[float] | None = None,
     hallucination_flags: list[bool] | None = None,
     answer_correctness_scores: list[float] | None = None,
+    consistency_scores: list[float] | None = None,
 ) -> EvaluationResult:
     """個別スコアを集計して EvaluationResult を返す。"""
     n = len(samples)
@@ -285,6 +323,12 @@ def aggregate_results(
         else None
     )
 
+    avg_consistency = (
+        sum(consistency_scores) / len(consistency_scores)
+        if consistency_scores
+        else None
+    )
+
     return EvaluationResult(
         em=avg_em,
         f1=avg_f1,
@@ -292,6 +336,7 @@ def aggregate_results(
         hallucination_rate=hallucination_rate,
         citation_accuracy=None,  # MMDocRAG で計測（フェーズ2）
         answer_correctness=avg_correctness,
+        answer_consistency=avg_consistency,
         num_samples=n,
         per_query_type=per_query_type,
     )
