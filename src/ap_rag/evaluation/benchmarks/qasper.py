@@ -1,0 +1,218 @@
+"""
+QASPER ベンチマーク実行器。
+
+研究計画書 §4.3「ベンチマーク: QASPER（必須）— 科学論文長文書QA」。
+
+QASPER データセット:
+  - HuggingFace: allenai/qasper
+  - 長文科学論文に対するQAで、WHY/WHAT/HOW/EVIDENCE タイプが豊富
+
+使い方:
+    runner = QASPERRunner(pipeline, indexing_pipeline, client)
+    result = runner.run(num_papers=10, num_questions=50)
+"""
+
+from __future__ import annotations
+
+import logging
+from dataclasses import dataclass
+from typing import Any
+
+from ap_rag.evaluation.metrics import EvaluationSample
+
+logger = logging.getLogger(__name__)
+
+# クエリ型推定のための簡易ルール
+_QUERY_TYPE_RULES = [
+    (["why", "なぜ", "reason", "cause", "理由", "原因"], "WHY"),
+    (["how", "どうやって", "どのように", "手順", "方法", "procedure"], "HOW"),
+    (["evidence", "根拠", "証拠", "support", "prove"], "EVIDENCE"),
+    (["assumption", "前提", "premise", "assume"], "ASSUMPTION"),
+]
+
+
+def infer_query_type(question: str) -> str:
+    """質問文からクエリ型を簡易推定する（LLMを使わない高速版）。"""
+    q_lower = question.lower()
+    for keywords, qt in _QUERY_TYPE_RULES:
+        if any(kw in q_lower for kw in keywords):
+            return qt
+    return "WHAT"
+
+
+@dataclass
+class QASPERSample:
+    """QASPER の1サンプル。"""
+    paper_id: str
+    question: str
+    answer: str
+    full_text: str
+
+
+class QASPERLoader:
+    """QASPER データセットをロードする。
+
+    Args:
+        split: "train" / "validation" / "test"
+        max_papers: ロードする論文数の上限（None = 全件）。
+    """
+
+    def __init__(self, split: str = "validation", max_papers: int | None = None) -> None:
+        self._split = split
+        self._max_papers = max_papers
+
+    def load(self) -> list[QASPERSample]:
+        """HuggingFace から QASPER をロードしてサンプルを返す。"""
+        try:
+            from datasets import load_dataset
+        except ImportError as e:
+            raise ImportError(
+                "datasets パッケージが必要です: pip install datasets"
+            ) from e
+
+        logger.info("QASPER データセットをロード中 (split=%s)...", self._split)
+        dataset = load_dataset("allenai/qasper", split=self._split, trust_remote_code=True)
+
+        samples: list[QASPERSample] = []
+        paper_count = 0
+
+        for paper in dataset:
+            if self._max_papers and paper_count >= self._max_papers:
+                break
+
+            paper_id = paper["id"]
+            full_text = self._extract_full_text(paper)
+
+            for qa in paper.get("qas", []):
+                question = qa.get("question", "").strip()
+                if not question:
+                    continue
+
+                # 複数アノテーターの回答から最初の有効な回答を使用
+                answer = self._extract_answer(qa)
+                if not answer:
+                    continue
+
+                samples.append(QASPERSample(
+                    paper_id=paper_id,
+                    question=question,
+                    answer=answer,
+                    full_text=full_text,
+                ))
+
+            paper_count += 1
+
+        logger.info("QASPER ロード完了: %d 論文, %d サンプル", paper_count, len(samples))
+        return samples
+
+    @staticmethod
+    def _extract_full_text(paper: dict) -> str:
+        """論文の全テキストを結合して返す。"""
+        parts: list[str] = []
+
+        # タイトル
+        title = paper.get("title", "")
+        if title:
+            parts.append(f"Title: {title}")
+
+        # Abstract
+        abstract = paper.get("abstract", "")
+        if abstract:
+            parts.append(f"Abstract: {abstract}")
+
+        # 本文セクション
+        full_text = paper.get("full_text", {})
+        for section in full_text.get("section_name", []):
+            parts.append(f"\nSection: {section}")
+        for paragraphs in full_text.get("paragraphs", []):
+            for para in paragraphs:
+                if para:
+                    parts.append(para)
+
+        return "\n".join(parts)
+
+    @staticmethod
+    def _extract_answer(qa: dict) -> str:
+        """QAエントリから回答文字列を抽出する。"""
+        for answer_data in qa.get("answers", []):
+            answer = answer_data.get("answer", {})
+
+            # Free-form answer
+            free_form = answer.get("free_form_answer", "").strip()
+            if free_form and free_form.lower() not in ("yes", "no", "unanswerable"):
+                return free_form
+
+            # Yes/No answer
+            yes_no = answer.get("yes_no_answer", "").strip()
+            if yes_no in ("yes", "no", "YES", "NO"):
+                return yes_no
+
+        return ""
+
+
+class QASPERRunner:
+    """QASPER でArgumentative-Path RAGを評価する実行器。
+
+    Args:
+        rag_pipeline: ArgumentativeRAGPipeline インスタンス。
+        indexing_pipeline: IndexingPipeline インスタンス。
+        num_papers: 使用する論文数。
+        num_questions: 論文あたりの最大質問数。
+        split: QASPER の分割（"validation" 推奨）。
+    """
+
+    def __init__(
+        self,
+        rag_pipeline: Any,
+        indexing_pipeline: Any,
+        num_papers: int = 10,
+        num_questions_per_paper: int = 5,
+        split: str = "validation",
+    ) -> None:
+        self._rag = rag_pipeline
+        self._indexer = indexing_pipeline
+        self._num_papers = num_papers
+        self._num_questions = num_questions_per_paper
+        self._split = split
+
+    def load_samples(self) -> list[EvaluationSample]:
+        """QASPER から EvaluationSample のリストを生成する。
+
+        各論文をインデックスし、QAペアを EvaluationSample に変換する。
+        """
+        loader = QASPERLoader(split=self._split, max_papers=self._num_papers)
+        raw_samples = loader.load()
+
+        # 論文ごとにインデックス（重複は skip）
+        indexed_papers: set[str] = set()
+        eval_samples: list[EvaluationSample] = []
+        paper_question_count: dict[str, int] = {}
+
+        for raw in raw_samples:
+            # 質問数の上限チェック
+            count = paper_question_count.get(raw.paper_id, 0)
+            if count >= self._num_questions:
+                continue
+
+            # 論文をインデックス（初回のみ）
+            if raw.paper_id not in indexed_papers:
+                logger.info("論文をインデックス中: %s", raw.paper_id)
+                try:
+                    self._indexer.run(raw.full_text, doc_id=raw.paper_id)
+                    indexed_papers.add(raw.paper_id)
+                except Exception as e:
+                    logger.warning("インデックス失敗: %s — %s", raw.paper_id, e)
+                    continue
+
+            eval_samples.append(EvaluationSample(
+                question=raw.question,
+                ground_truth=raw.answer,
+                predicted_answer="",  # 評価時に埋める
+                retrieved_contexts=[],
+                doc_id=raw.paper_id,
+                query_type=infer_query_type(raw.question),
+            ))
+            paper_question_count[raw.paper_id] = count + 1
+
+        logger.info("QASPER サンプル準備完了: %d 件", len(eval_samples))
+        return eval_samples

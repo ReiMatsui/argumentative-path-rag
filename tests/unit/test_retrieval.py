@@ -60,51 +60,103 @@ def _make_node(node_type: NodeType, text: str = "テキスト") -> ArgumentNode:
 
 
 class TestGraphTraverser:
-    def _make_store(self, neighbor_map: dict[str, list[ArgumentNode]]) -> GraphStore:
-        """get_neighbors の返値をノードIDでマッピングしたモックストア。"""
+    def _make_store(
+        self,
+        incoming_map: dict[str, list[ArgumentNode]] | None = None,
+        outgoing_map: dict[str, list[ArgumentNode]] | None = None,
+    ) -> GraphStore:
+        """direction を考慮したモックストアを生成する。
+
+        Args:
+            incoming_map: direction="incoming" のときに返すノード（node_id → list）。
+            outgoing_map: direction="outgoing" のときに返すノード（node_id → list）。
+        """
+        incoming_map = incoming_map or {}
+        outgoing_map = outgoing_map or {}
+
+        def _get_neighbors(node_id, edge_types=None, direction="incoming"):
+            if direction == "incoming":
+                return incoming_map.get(node_id, [])
+            else:
+                return outgoing_map.get(node_id, [])
+
         mock_store = MagicMock(spec=GraphStore)
-        mock_store.get_neighbors.side_effect = lambda node_id, **kwargs: neighbor_map.get(node_id, [])
+        mock_store.get_neighbors.side_effect = _get_neighbors
         return mock_store
 
     def test_what_type_returns_only_entry_nodes(self):
         """WHAT 型は max_depth=0 なので探索せずエントリーのみ返す。"""
         entry = _make_node(NodeType.CLAIM, "売上はいくらか。")
-        store = self._make_store({})
+        store = self._make_store()
         traverser = GraphTraverser(store)
         result = traverser.traverse([entry], QueryType.WHAT)
         assert result == [entry]
         store.get_neighbors.assert_not_called()
 
     def test_why_type_traverses_to_evidence(self):
-        """WHY 型は EVIDENCE ノードまで辿る。"""
+        """WHY 型は SUPPORTS(incoming) で EVIDENCE ノードまで辿る。"""
         claim = _make_node(NodeType.CLAIM, "売上が減少した。")
         evidence = _make_node(NodeType.EVIDENCE, "在庫調整が主因。")
-        store = self._make_store({claim.id: [evidence]})
+        store = self._make_store(incoming_map={claim.id: [evidence]})
         traverser = GraphTraverser(store)
         result = traverser.traverse([claim], QueryType.WHY)
         node_ids = {n.id for n in result}
         assert claim.id in node_ids
         assert evidence.id in node_ids
 
+    def test_why_type_traverses_to_assumption_via_outgoing(self):
+        """WHY 型は ASSUMES(outgoing) で ASSUMPTION ノードまで辿る。"""
+        claim = _make_node(NodeType.CLAIM, "売上が減少した。")
+        assumption = _make_node(NodeType.ASSUMPTION, "為替は安定前提。")
+        # ASSUMES は outgoing（CLAIM → ASSUMPTION）
+        store = self._make_store(outgoing_map={claim.id: [assumption]})
+        traverser = GraphTraverser(store)
+        result = traverser.traverse([claim], QueryType.WHY)
+        node_ids = {n.id for n in result}
+        assert claim.id in node_ids
+        assert assumption.id in node_ids
+
     def test_why_type_excludes_contrast_nodes(self):
         """WHY 型は CONTRAST ノードを除外する。"""
         claim = _make_node(NodeType.CLAIM, "売上が減少した。")
         contrast = _make_node(NodeType.CONTRAST, "競合は増加した。")
-        store = self._make_store({claim.id: [contrast]})
+        store = self._make_store(incoming_map={claim.id: [contrast]})
         traverser = GraphTraverser(store)
         result = traverser.traverse([claim], QueryType.WHY)
         node_ids = {n.id for n in result}
         assert contrast.id not in node_ids
+
+    def test_assumption_type_uses_outgoing(self):
+        """ASSUMPTION 型は ASSUMES(outgoing) で ASSUMPTION ノードを取得する。"""
+        claim = _make_node(NodeType.CLAIM, "売上が減少した。")
+        assumption = _make_node(NodeType.ASSUMPTION, "半導体不足は構造的問題。")
+        # ASSUMES は outgoing（CLAIM → ASSUMPTION）
+        store = self._make_store(outgoing_map={claim.id: [assumption]})
+        traverser = GraphTraverser(store)
+        result = traverser.traverse([claim], QueryType.ASSUMPTION)
+        node_ids = {n.id for n in result}
+        assert claim.id in node_ids
+        assert assumption.id in node_ids
+
+    def test_assumption_type_does_not_use_incoming(self):
+        """ASSUMPTION 型で incoming 側にノードがあっても取得されない。"""
+        claim = _make_node(NodeType.CLAIM, "売上が減少した。")
+        evidence = _make_node(NodeType.EVIDENCE, "在庫調整が主因。")
+        # incoming 側に EVIDENCE を置いても ASSUMPTION 型では無視される
+        store = self._make_store(incoming_map={claim.id: [evidence]})
+        traverser = GraphTraverser(store)
+        result = traverser.traverse([claim], QueryType.ASSUMPTION)
+        node_ids = {n.id for n in result}
+        assert evidence.id not in node_ids
 
     def test_max_depth_limits_traversal(self):
         """depth=1 でA→B→Cのとき、AがエントリーならBまでしか辿らない。"""
         a = _make_node(NodeType.CLAIM, "A")
         b = _make_node(NodeType.EVIDENCE, "B")
         c = _make_node(NodeType.CONCLUSION, "C")
-        store = self._make_store({a.id: [b], b.id: [c]})
+        store = self._make_store(incoming_map={a.id: [b], b.id: [c]})
         traverser = GraphTraverser(store)
 
-        # max_depth=1 の戦略を作って確認
         from ap_rag.models.taxonomy import TraversalStrategy, EdgeType
         strategy = TraversalStrategy(
             entry_node_types=[NodeType.CLAIM],

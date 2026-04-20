@@ -98,10 +98,16 @@ class TraversalStrategy:
 
     Attributes:
         entry_node_types: グラフ探索の入口として優先するノード型。
-        follow_edges: 辿るエッジ型のセット（逆方向を含む場合は reverse=True）。
+        follow_edges: 辿るエッジ型のリスト。
         exclude_node_types: 取得結果から除外するノード型。
         max_depth: グラフ探索の最大深度（None = 制限なし）。
+        edge_directions: エッジ型ごとの探索方向。
+            "incoming" = エッジの向きを逆に辿る（SUPPORTS: EVIDENCE→CLAIM なら CLAIM から辿ると EVIDENCE が見つかる）。
+            "outgoing" = エッジの向きのまま辿る（ASSUMES: CLAIM→ASSUMPTION なら CLAIM から辿ると ASSUMPTION が見つかる）。
+            指定のないエッジ型はデフォルト値（"incoming"）を使用。
     """
+
+    _DEFAULT_DIRECTION = "incoming"
 
     def __init__(
         self,
@@ -109,20 +115,50 @@ class TraversalStrategy:
         follow_edges: list[EdgeType],
         exclude_node_types: list[NodeType],
         max_depth: int | None = 3,
+        edge_directions: dict[EdgeType, str] | None = None,
     ) -> None:
         self.entry_node_types = entry_node_types
         self.follow_edges = follow_edges
         self.exclude_node_types = exclude_node_types
         self.max_depth = max_depth
+        self.edge_directions: dict[EdgeType, str] = edge_directions or {}
+
+    def direction_for(self, edge_type: EdgeType) -> str:
+        """指定エッジ型の探索方向を返す。未指定の場合はデフォルト値。"""
+        return self.edge_directions.get(edge_type, self._DEFAULT_DIRECTION)
+
+    def edges_by_direction(self) -> dict[str, list[str]]:
+        """エッジ型を方向ごとにグループ化して返す。
+
+        Returns:
+            {"incoming": ["SUPPORTS", ...], "outgoing": ["ASSUMES", ...]}
+        """
+        groups: dict[str, list[str]] = {"incoming": [], "outgoing": []}
+        for et in self.follow_edges:
+            direction = self.direction_for(et)
+            groups[direction].append(et.value)
+        return groups
 
 
 # 研究計画書 §4.2 テーブルを忠実に実装
+#
+# エッジ方向の根拠:
+#   SUPPORTS   : EVIDENCE  → CLAIM       incoming（CLAIMに入ってくるEVIDENCEを探す）
+#   DERIVES    : EVIDENCE  → CONCLUSION  incoming（CONCLUSIONに入ってくる根拠を探す）
+#   ASSUMES    : CLAIM     → ASSUMPTION  outgoing（CLAIMから出ていくASSUMPTIONを探す）
+#   ILLUSTRATES: visual    → CLAIM       incoming
+#   CONTRASTS  : CONTRAST  → CLAIM       incoming
 TRAVERSAL_STRATEGIES: dict[QueryType, TraversalStrategy] = {
     QueryType.WHY: TraversalStrategy(
         entry_node_types=[NodeType.CLAIM, NodeType.CONCLUSION],
         follow_edges=[EdgeType.SUPPORTS, EdgeType.DERIVES, EdgeType.ASSUMES],
         exclude_node_types=[NodeType.CONTRAST],
         max_depth=3,
+        edge_directions={
+            EdgeType.SUPPORTS: "incoming",
+            EdgeType.DERIVES:  "incoming",
+            EdgeType.ASSUMES:  "outgoing",   # CLAIM → ASSUMPTION
+        },
     ),
     QueryType.WHAT: TraversalStrategy(
         entry_node_types=[NodeType.CLAIM, NodeType.DEFINITION],
@@ -135,17 +171,27 @@ TRAVERSAL_STRATEGIES: dict[QueryType, TraversalStrategy] = {
         follow_edges=[EdgeType.ILLUSTRATES, EdgeType.DERIVES],
         exclude_node_types=[],
         max_depth=3,
+        edge_directions={
+            EdgeType.ILLUSTRATES: "incoming",
+            EdgeType.DERIVES:     "incoming",
+        },
     ),
     QueryType.EVIDENCE: TraversalStrategy(
         entry_node_types=[NodeType.CLAIM],
         follow_edges=[EdgeType.SUPPORTS],
         exclude_node_types=[NodeType.CONTRAST, NodeType.ASSUMPTION],
         max_depth=2,
+        edge_directions={
+            EdgeType.SUPPORTS: "incoming",
+        },
     ),
     QueryType.ASSUMPTION: TraversalStrategy(
         entry_node_types=[NodeType.CLAIM, NodeType.CONCLUSION],
         follow_edges=[EdgeType.ASSUMES],
         exclude_node_types=[],
         max_depth=2,
+        edge_directions={
+            EdgeType.ASSUMES: "outgoing",    # CLAIM → ASSUMPTION
+        },
     ),
 }

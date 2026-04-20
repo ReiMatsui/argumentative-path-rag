@@ -25,24 +25,45 @@ _SYSTEM_PROMPT = """\
 You are an expert in argument analysis. Given a list of argumentative nodes, \
 identify the directed relationships between them.
 
-Available edge types:
-- SUPPORTS: source supports/backs up the target claim.
-- CONTRADICTS: source contradicts/refutes the target.
-- DERIVES: target conclusion is logically derived from source.
-- ASSUMES: source claim assumes/presupposes the target assumption.
-- ILLUSTRATES: source (figure/example) illustrates the target claim.
-- CONTRASTS: source is in contrast relation with the target.
+Edge type definitions and direction rules:
+
+- SUPPORTS   : (EVIDENCE/CONCLUSION) ──SUPPORTS──▶ (CLAIM)
+               The source provides empirical or logical support for the target claim.
+               Example: "Inventory adjustments were the main factor" SUPPORTS "Q3 revenue fell 12%"
+
+- CONTRADICTS: (CONTRAST) ──CONTRADICTS──▶ (CLAIM)
+               The source challenges or refutes the target.
+               Example: "Competitor grew 8%" CONTRADICTS "Our sales declined"
+
+- DERIVES    : (EVIDENCE) ──DERIVES──▶ (CONCLUSION)
+               The target conclusion is derived/inferred from the source evidence.
+               Example: "Semiconductor shortage caused stoppage" DERIVES "Shortage will continue next quarter"
+
+- ASSUMES    : (CLAIM or CONCLUSION) ──ASSUMES──▶ (ASSUMPTION)
+               The source claim/conclusion only holds if the target assumption is true.
+               The source DEPENDS ON the target assumption as a hidden premise.
+               Example: "Q3 revenue fell 12%" ASSUMES "Exchange rates were stable (so FX is not the cause)"
+               CRITICAL: source must be CLAIM or CONCLUSION; target must be ASSUMPTION.
+
+- ILLUSTRATES: (visual/example node) ──ILLUSTRATES──▶ (CLAIM)
+               The source concretely illustrates or exemplifies the target.
+
+- CONTRASTS  : (CONTRAST) ──CONTRASTS──▶ (CLAIM)
+               The source presents a contrasting case relative to the target.
 
 Rules:
-1. Only output edges that you are confident about (confidence >= 0.7).
-2. Output ONLY a JSON object with a single key "edges" containing an array of objects.
-3. Each object must have keys: "source_idx", "target_idx", "edge_type", "confidence"
+1. Only output edges with confidence >= 0.7.
+2. Strictly follow the direction conventions above — especially for ASSUMES:
+   source = CLAIM or CONCLUSION, target = ASSUMPTION.
+3. Output ONLY a JSON object with a single key "edges" containing an array of objects.
+4. Each object must have keys: "source_idx", "target_idx", "edge_type", "confidence"
    where idx refers to the 0-based index in the provided nodes list.
-4. If there are no clear relationships, output: {"edges": []}
-5. Do not create edges between identical texts.
+5. If there are no clear relationships, output: {"edges": []}
+6. Do not create edges between identical texts.
 
 Required output format:
 {"edges": [
+  {"source_idx": 0, "target_idx": 2, "edge_type": "ASSUMES", "confidence": 0.85},
   {"source_idx": 1, "target_idx": 0, "edge_type": "SUPPORTS", "confidence": 0.95}
 ]}
 """

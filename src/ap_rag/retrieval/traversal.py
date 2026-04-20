@@ -54,8 +54,8 @@ class GraphTraverser:
     ) -> list[ArgumentNode]:
         """BFS でグラフを探索する。
 
-        WHY型など「逆方向に辿る」戦略の場合、エッジの direction を
-        "incoming"（エッジの向きを逆に辿る）に設定する。
+        エッジ型ごとに探索方向が異なるため（例: SUPPORTS=incoming, ASSUMES=outgoing）、
+        方向別にグループ化してそれぞれ get_neighbors を呼ぶ。
 
         Args:
             entry_nodes: 探索の入口ノード。
@@ -75,11 +75,10 @@ class GraphTraverser:
         queue: deque[tuple[ArgumentNode, int]] = deque()
 
         exclude_types = set(strategy.exclude_node_types)
-        edge_type_values = (
-            [et.value for et in strategy.follow_edges]
-            if strategy.follow_edges
-            else None
-        )
+
+        # エッジ型を探索方向ごとにグループ化（事前計算）
+        # {"incoming": ["SUPPORTS", "DERIVES"], "outgoing": ["ASSUMES"]} など
+        edges_by_direction = strategy.edges_by_direction()
 
         # エントリーノードをキューに投入
         for node in entry_nodes:
@@ -93,12 +92,9 @@ class GraphTraverser:
             if strategy.max_depth is not None and depth >= strategy.max_depth:
                 continue
 
-            # 探索方向: SUPPORTS / DERIVES / ASSUMES は「根拠 → 主張」方向なので
-            # WHY型では incoming（逆向き）で辿ることで因果を遡る
-            neighbors = self._store.get_neighbors(
-                node_id=current.id,
-                edge_types=edge_type_values,
-                direction="incoming",
+            # 方向別にまとめて隣接ノードを取得
+            neighbors = self._fetch_neighbors_by_direction(
+                current.id, edges_by_direction
             )
 
             for neighbor in neighbors:
@@ -116,9 +112,40 @@ class GraphTraverser:
 
         result = list(visited.values())
         logger.debug(
-            "BFS完了: query_type=%s, entry=%d, 収集=%d ノード",
-            strategy,
+            "BFS完了: entry=%d, 収集=%d ノード",
             len(entry_nodes),
             len(result),
         )
+        return result
+
+    def _fetch_neighbors_by_direction(
+        self,
+        node_id: str,
+        edges_by_direction: dict[str, list[str]],
+    ) -> list[ArgumentNode]:
+        """方向別にグループ化されたエッジ型を使い、隣接ノードを取得して返す。
+
+        Args:
+            node_id: 起点ノードのID。
+            edges_by_direction: {"incoming": [...], "outgoing": [...]} 形式。
+
+        Returns:
+            重複なしの隣接ノードリスト。
+        """
+        seen_ids: set[str] = set()
+        result: list[ArgumentNode] = []
+
+        for direction, edge_type_values in edges_by_direction.items():
+            if not edge_type_values:
+                continue
+            neighbors = self._store.get_neighbors(
+                node_id=node_id,
+                edge_types=edge_type_values,
+                direction=direction,
+            )
+            for n in neighbors:
+                if n.id not in seen_ids:
+                    seen_ids.add(n.id)
+                    result.append(n)
+
         return result
