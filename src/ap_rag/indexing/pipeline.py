@@ -10,13 +10,15 @@
     NodeClassifier / EdgeExtractor の呼び出しは I/O バウンド（OpenAI API 待ち）
     なので ThreadPoolExecutor で並列実行できる。グラフへの書き込みだけを
     threading.Lock で直列化することで安全性を確保する。
-    デフォルト max_workers=4 は一般的な OpenAI Tier でレートリミットに
-    かからない安全な並列数。
+    既定の並列数は **環境変数 `INDEXING_MAX_WORKERS`** で制御する
+    (未設定なら 4)。OpenAI の Tier とレートリミットに応じて調整する。
+    コンストラクタに明示値を渡せば環境変数を上書きできる。
 """
 
 from __future__ import annotations
 
 import logging
+import os
 import sys
 import threading
 from concurrent.futures import Future, ThreadPoolExecutor, as_completed
@@ -32,6 +34,32 @@ from ap_rag.indexing.extractor import EdgeExtractor
 from ap_rag.models.graph import ArgumentEdge, ArgumentGraph, ArgumentNode
 
 logger = logging.getLogger(__name__)
+
+
+# `max_workers` のデフォルト: 環境変数 `INDEXING_MAX_WORKERS` を優先、
+# なければ 4。不正値 (非数値 / 1 未満) は 4 にフォールバック。
+_DEFAULT_MAX_WORKERS = 4
+
+
+def _resolve_default_max_workers() -> int:
+    raw = os.environ.get("INDEXING_MAX_WORKERS")
+    if raw is None or raw.strip() == "":
+        return _DEFAULT_MAX_WORKERS
+    try:
+        n = int(raw)
+    except ValueError:
+        logger.warning(
+            "INDEXING_MAX_WORKERS=%r は整数でないのでデフォルト %d を使用します",
+            raw, _DEFAULT_MAX_WORKERS,
+        )
+        return _DEFAULT_MAX_WORKERS
+    if n < 1:
+        logger.warning(
+            "INDEXING_MAX_WORKERS=%d は 1 未満なのでデフォルト %d を使用します",
+            n, _DEFAULT_MAX_WORKERS,
+        )
+        return _DEFAULT_MAX_WORKERS
+    return n
 
 
 @dataclass
@@ -63,9 +91,9 @@ class IndexingPipeline:
         store: グラフを永続化するストア。
         show_progress: 進行状況をターミナルに表示するか。
         max_workers: 並列 API 呼び出し数。
-                     OpenAI の一般的な Tier でレートリミットに
-                     かからない目安として 4 をデフォルトとする。
-                     直列処理にしたい場合は 1 を指定。
+                     None (既定) の場合は環境変数 `INDEXING_MAX_WORKERS`
+                     を読み、なければ 4。明示的に整数を渡せば env より優先。
+                     直列処理にしたい場合は 1。
     """
 
     def __init__(
@@ -75,7 +103,7 @@ class IndexingPipeline:
         extractor: EdgeExtractor,
         store: GraphStore,
         show_progress: bool = True,
-        max_workers: int = 4,
+        max_workers: int | None = None,
         cross_chunk_extractor: CrossChunkEdgeExtractor | None = None,
     ) -> None:
         self._chunker = chunker
@@ -83,7 +111,9 @@ class IndexingPipeline:
         self._extractor = extractor
         self._store = store
         self._show_progress = show_progress
-        self._max_workers = max_workers
+        self._max_workers = (
+            max_workers if max_workers is not None else _resolve_default_max_workers()
+        )
         self._cross_chunk_extractor = cross_chunk_extractor
 
     def run(self, text: str, doc_id: str) -> IndexingResult:

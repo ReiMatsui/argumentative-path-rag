@@ -138,6 +138,8 @@ def build_and_index_argumentative_rag(
     shared_encoder=None,
     classifier_model: str = "gpt-4o-mini",
     generator_model: str = "gpt-4o-mini",
+    max_workers: int | None = None,
+    cache_dir: str | None = ".cache/graphs",
 ):
     """ArgumentativeRAGPipeline を構築し、全論文をインデックスする。
 
@@ -146,12 +148,16 @@ def build_and_index_argumentative_rag(
             CrossChunkEdgeExtractor の両方にこの encoder を注入し、
             sentence-transformers / torch の遅延ロードを完全にスキップする
             （`OpenAIEncoder` など SentenceTransformer 互換アダプタに対応）。
+        max_workers: インデックスの並列度。None なら env を参照。
+        cache_dir: グラフキャッシュの親ディレクトリ。None / 空文字ならキャッシュ無効。
     """
+    import os as _os
     from ap_rag.graph.networkx_store import NetworkXGraphStore
     from ap_rag.indexing.chunker import SentenceChunker
     from ap_rag.indexing.classifier import NodeClassifier
     from ap_rag.indexing.cross_chunk import CrossChunkEdgeExtractor
     from ap_rag.indexing.extractor import EdgeExtractor
+    from ap_rag.indexing.graph_cache import GraphCache, IndexConfigFingerprint
     from ap_rag.indexing.pipeline import IndexingPipeline
     from ap_rag.retrieval.query_classifier import QueryClassifier
     from ap_rag.retrieval.traversal import GraphTraverser
@@ -185,34 +191,86 @@ def build_and_index_argumentative_rag(
             batch_size=8,
         )
 
+    # グラフキャッシュ (有効時) — 同じ fingerprint で同じ doc_id があればスキップ
+    chunker = SentenceChunker()
+    cache: GraphCache | None = None
+    if cache_dir:
+        fingerprint = IndexConfigFingerprint(
+            classifier_model=classifier_model,
+            reasoning_effort=_os.environ.get("OPENAI_REASONING_EFFORT", "low"),
+            chunk_max_tokens=chunker.max_tokens,
+            use_cross_chunk=use_cross_chunk,
+        )
+        cache = GraphCache(cache_dir=cache_dir, fingerprint=fingerprint)
+        console.print(
+            f"  [dim]グラフキャッシュ: {cache.root} "
+            f"(fingerprint={fingerprint.to_hash()})[/]"
+        )
+
     store = NetworkXGraphStore()
     indexer = IndexingPipeline(
-        chunker=SentenceChunker(),
+        chunker=chunker,
         classifier=NodeClassifier(client=client, model=classifier_model),
         extractor=edge_extractor,
         store=store,
         # チャンク単位の進行状況バーを表示（reasoning モデルは 1 チャンクあたり
         # 数秒〜十数秒かかるため、進捗が見えないと不安になる）。
         show_progress=True,
+        max_workers=max_workers,
         cross_chunk_extractor=cross_chunk,
     )
 
+    if max_workers is not None:
+        console.print(f"  [dim]並列実行数: {max_workers}[/]")
+
     total_nodes, total_edges = 0, 0
+    n_cache_hits = 0
+    n_fresh = 0
     for i, (paper_id, full_text) in enumerate(raw_by_paper.items(), 1):
         short_id = paper_id[:16] + "..."
+
+        # 1) キャッシュヒットなら LLM 呼び出しを丸ごとスキップ
+        if cache is not None and cache.has(paper_id):
+            try:
+                cached_graph = cache.load(paper_id)
+                store.save_graph(cached_graph)
+                stats = cached_graph.stats()
+                total_nodes += stats["total_nodes"]
+                total_edges += stats["total_edges"]
+                n_cache_hits += 1
+                console.print(
+                    f"  [cyan]({i}/{len(raw_by_paper)})[/] "
+                    f"[green]✓ キャッシュ復元:[/] {short_id} "
+                    f"(nodes={stats['total_nodes']} edges={stats['total_edges']})"
+                )
+                continue
+            except KeyError:
+                # 壊れたキャッシュ → 再生成にフォールバック
+                console.print(
+                    f"  [yellow]⚠ キャッシュ破損のため再生成: {short_id}[/]"
+                )
+
+        # 2) 新規インデックス
         console.print(f"  [cyan]({i}/{len(raw_by_paper)}) インデックス中: {short_id}[/]")
-        # IndexingPipeline 側が rich.Progress で進捗バーを出すので、
-        # ここで console.status を被せると Live が入れ子になって壊れる。
         result = indexer.run(full_text, doc_id=paper_id)
         stats = result.graph.stats()
         total_nodes += stats["total_nodes"]
         total_edges += stats["total_edges"]
+        n_fresh += 1
         console.print(
             f"    [green]✓[/] ノード {stats['total_nodes']} / エッジ {stats['total_edges']}"
         )
 
+        # 3) **1 文書終わったら即キャッシュ保存** — 後段でクラッシュしてもここまでは残る
+        if cache is not None:
+            try:
+                cache.save(result.graph)
+            except Exception as e:
+                console.print(f"    [yellow]⚠ キャッシュ保存失敗 (無視可): {e}[/]")
+
     console.print(
-        f"  [bold green]合計: ノード {total_nodes} / エッジ {total_edges}[/]"
+        f"  [bold green]合計: ノード {total_nodes} / エッジ {total_edges}"
+        f" (cache_hit={n_cache_hits} / fresh={n_fresh})[/]"
     )
 
     pipeline = ArgumentativeRAGPipeline(
@@ -480,6 +538,8 @@ def main(
     classifier_model: str = "gpt-4o-mini",
     generator_model: str = "gpt-4o-mini",
     judge_model: str = "gpt-4o-mini",
+    max_workers: int | None = None,
+    cache_dir: str | None = ".cache/graphs",
 ) -> None:
     consistency_note = (
         f" / Consistency: {consistency_runs}×" if consistency_runs >= 2 else ""
@@ -552,6 +612,8 @@ def main(
         shared_encoder=shared_encoder,
         classifier_model=classifier_model,
         generator_model=generator_model,
+        max_workers=max_workers,
+        cache_dir=cache_dir,
     )
 
     console.print("[bold]BM25RAG:[/]")
@@ -650,6 +712,16 @@ if __name__ == "__main__":
     # reasoning_effort は openai_compat が環境変数から読むので、
     # ここでは CLI フラグ経由で `OPENAI_REASONING_EFFORT` を書き換える形にする。
     _env_reasoning = os.environ.get("OPENAI_REASONING_EFFORT", "low")
+    # 並列実行数: .env の `INDEXING_MAX_WORKERS` を既定値として読む
+    _env_workers_raw = os.environ.get("INDEXING_MAX_WORKERS", "4")
+    try:
+        _env_workers = int(_env_workers_raw)
+        if _env_workers < 1:
+            _env_workers = 4
+    except ValueError:
+        _env_workers = 4
+    # グラフキャッシュ置き場: .env の `GRAPH_CACHE_DIR`、無ければ `.cache/graphs`
+    _env_cache_dir = os.environ.get("GRAPH_CACHE_DIR", ".cache/graphs")
 
     parser = argparse.ArgumentParser(description="QASPER ミニ評価")
     parser.add_argument("--papers",    type=int, default=3,  help="論文数（デフォルト: 3）")
@@ -758,12 +830,36 @@ if __name__ == "__main__":
             f"既定: .env の OPENAI_REASONING_EFFORT (現在: {_env_reasoning})。"
         ),
     )
+    parser.add_argument(
+        "--max-workers",
+        type=int,
+        default=_env_workers,
+        help=(
+            "インデックス処理の並列 API 呼び出し数。高いほど高速だが "
+            "OpenAI のレートリミットに当たる可能性が上がる。目安: Tier1 で 4, "
+            "Tier2+ なら 8-16 も可。"
+            f"既定: .env の INDEXING_MAX_WORKERS (現在: {_env_workers})。"
+        ),
+    )
+    parser.add_argument(
+        "--cache-dir",
+        type=str,
+        default=_env_cache_dir,
+        help=(
+            "インデックスされたグラフをドキュメント単位でキャッシュするディレクトリ。"
+            "同じ (classifier_model, reasoning_effort, chunk 設定, prompt_version) "
+            "のときに再利用される。空文字 '' を渡すとキャッシュ無効。"
+            f"既定: .env の GRAPH_CACHE_DIR (現在: {_env_cache_dir})。"
+        ),
+    )
     args = parser.parse_args()
 
     # CLI フラグを openai_compat が参照する環境変数に書き戻すことで、
     # classifier / extractor / generator 等の全コンポーネントに一括で効かせる。
     # （各クラスに reasoning_effort パラメータを足すより配管が少ない）
     os.environ["OPENAI_REASONING_EFFORT"] = args.reasoning_effort
+    # 同様に並列数も env 側にも書いておく (pipeline.py の既定値解決はこの env を見る)
+    os.environ["INDEXING_MAX_WORKERS"] = str(args.max_workers)
 
     if args.debug:
         logging.basicConfig(level=logging.DEBUG)
@@ -786,4 +882,6 @@ if __name__ == "__main__":
         classifier_model=args.classifier_model,
         generator_model=args.generator_model,
         judge_model=args.judge_model,
+        max_workers=args.max_workers,
+        cache_dir=args.cache_dir or None,  # 空文字ならキャッシュ無効
     )

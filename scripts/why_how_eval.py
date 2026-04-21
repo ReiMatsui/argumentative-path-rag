@@ -118,6 +118,8 @@ def main(
     generator_model: str,
     judge_model: str,
     save_json: str | None,
+    max_workers: int | None = None,
+    cache_dir: str | None = ".cache/graphs",
 ) -> None:
     from dotenv import load_dotenv
     load_dotenv()
@@ -161,6 +163,8 @@ def main(
         shared_encoder=shared_encoder,
         classifier_model=classifier_model,
         generator_model=generator_model,
+        max_workers=max_workers,
+        cache_dir=cache_dir,
     )
     console.print("[bold]BM25RAG:[/]")
     bm25_rag = build_and_index_bm25(client, raw_by_paper, generator_model=generator_model)
@@ -243,6 +247,14 @@ if __name__ == "__main__":
     _env_generator = os.environ.get("OPENAI_GENERATOR_MODEL", "gpt-5-mini")
     _env_judge = os.environ.get("OPENAI_JUDGE_MODEL", _env_generator)
     _env_reasoning = os.environ.get("OPENAI_REASONING_EFFORT", "low")
+    _env_workers_raw = os.environ.get("INDEXING_MAX_WORKERS", "4")
+    try:
+        _env_workers = int(_env_workers_raw)
+        if _env_workers < 1:
+            _env_workers = 4
+    except ValueError:
+        _env_workers = 4
+    _env_cache_dir = os.environ.get("GRAPH_CACHE_DIR", ".cache/graphs")
 
     parser = argparse.ArgumentParser(description="WHY/HOW 合成セット評価")
     parser.add_argument("--in", dest="in_path", type=str,
@@ -269,12 +281,27 @@ if __name__ == "__main__":
             f"既定: .env の OPENAI_REASONING_EFFORT (現在: {_env_reasoning})。"
         ),
     )
+    parser.add_argument(
+        "--max-workers", type=int, default=_env_workers,
+        help=(
+            "インデックスの並列 API 呼び出し数。"
+            f"既定: .env の INDEXING_MAX_WORKERS (現在: {_env_workers})。"
+        ),
+    )
+    parser.add_argument(
+        "--cache-dir", type=str, default=_env_cache_dir,
+        help=(
+            "グラフキャッシュのディレクトリ。空文字 '' でキャッシュ無効。"
+            f"既定: .env の GRAPH_CACHE_DIR (現在: {_env_cache_dir})。"
+        ),
+    )
     parser.add_argument("--save-json", type=str, default=None)
     parser.add_argument("--debug", action="store_true")
     args = parser.parse_args()
 
-    # CLI フラグを openai_compat 用の環境変数に書き戻す
+    # CLI フラグを openai_compat / pipeline 用の環境変数に書き戻す
     os.environ["OPENAI_REASONING_EFFORT"] = args.reasoning_effort
+    os.environ["INDEXING_MAX_WORKERS"] = str(args.max_workers)
 
     logging.basicConfig(level=logging.DEBUG if args.debug else logging.WARNING)
 
@@ -290,4 +317,6 @@ if __name__ == "__main__":
         generator_model=args.generator_model,
         judge_model=args.judge_model,
         save_json=args.save_json,
+        max_workers=args.max_workers,
+        cache_dir=args.cache_dir or None,
     )

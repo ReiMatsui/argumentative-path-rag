@@ -13,3 +13,6 @@ wheels/
 .env
 .env.local
 *.env.local
+
+# インデックスキャッシュ (GraphCache) — 再現可能なので commit しない
+.cache/
